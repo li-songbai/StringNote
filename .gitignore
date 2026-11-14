@@ -1,0 +1,7 @@
+.dotnet-home/
+.nuget-packages/
+.local-data/
+app/Xianpu.Desktop/bin/
+app/Xianpu.Desktop/obj/
+app/startup.log
+dist/
