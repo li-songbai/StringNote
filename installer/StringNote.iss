@@ -20,6 +20,7 @@ RestartApplications=yes
 ChangesAssociations=yes
 OutputDir=..\dist
 OutputBaseFilename=StringNote-Setup-{#AppVersion}
+SetupIconFile=..\app\Xianpu.Desktop\Assets\StringNote.ico
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern

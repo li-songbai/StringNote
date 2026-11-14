@@ -23,6 +23,8 @@ public partial class MainWindow : Window
     private ChordAnchor? _popoverAnchor;
     private string _popoverInitialChord = "";
     private bool _syncingPopoverPosition;
+    private TrayService? _trayService;
+    private bool _isExplicitExit;
     private const string AllCategoriesLabel = "全部分类";
 
     private static readonly string[] KeyNames =
@@ -39,12 +41,22 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        LoadWindowIcon();
 
         OriginalKeyBox.ItemsSource = KeyNames;
         SelectedKeyBox.ItemsSource = KeyNames;
         CapoBox.ItemsSource = CapoOptions;
 
         LoadInitialState();
+
+        _trayService = new TrayService(
+            RestoreFromTray,
+            () =>
+            {
+                RestoreFromTray();
+                CheckUpdate_Click(this, new RoutedEventArgs());
+            },
+            ExitApplication);
 
         ScoreSurface.Changed += () =>
         {
@@ -683,7 +695,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
-            MessageBox.Show(this, ex.Message, "导入歌词失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            AppDialogs.ShowError(this, "导入歌词失败", ex.Message);
         }
     }
 
@@ -709,7 +721,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
         {
-            MessageBox.Show(this, ex.Message, "打开曲谱失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            AppDialogs.ShowError(this, "打开曲谱失败", ex.Message);
         }
     }
 
@@ -759,7 +771,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            MessageBox.Show(this, ex.Message, "保存失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            AppDialogs.ShowError(this, "保存失败", ex.Message);
         }
     }
 
@@ -785,11 +797,16 @@ public partial class MainWindow : Window
             using var stream = File.Create(dialog.FileName);
             encoder.Save(stream);
             SetStatus($"PNG 图片已导出（{bitmap.PixelWidth} × {bitmap.PixelHeight}）：{Path.GetFileName(dialog.FileName)}");
-            MessageBox.Show(this, $"曲谱图片已导出：\n{dialog.FileName}\n尺寸：{bitmap.PixelWidth} × {bitmap.PixelHeight} px", "导出完成", MessageBoxButton.OK, MessageBoxImage.Information);
+            AppDialogs.ShowInfo(
+                this,
+                "导出完成",
+                $"曲谱图片已导出：\n{dialog.FileName}\n尺寸：{bitmap.PixelWidth} × {bitmap.PixelHeight} px",
+                "打开所在文件夹",
+                () => Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{dialog.FileName}\"") { UseShellExecute = true }));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
         {
-            MessageBox.Show(this, ex.Message, "导出失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            AppDialogs.ShowError(this, "导出失败", ex.Message);
         }
     }
 
@@ -816,55 +833,79 @@ public partial class MainWindow : Window
         if (_selectedSong is not { } song) return;
         CommitFields();
 
-        var dialog = new Window
-        {
-            Title = "批量移调",
-            Owner = this,
-            Width = 360,
-            Height = 215,
-            ResizeMode = ResizeMode.NoResize,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Background = new SolidColorBrush(Color.FromRgb(248, 250, 252)),
-            FontFamily = FontFamily
-        };
+        var dialog = AppDialogs.CreateCardWindow(
+            this,
+            "批量移调",
+            "指定原和弦调与目标选调，一键转换全谱和弦",
+            390,
+            null,
+            false,
+            out var root);
 
-        var root = new Grid { Margin = new Thickness(18) };
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         var row1 = new DockPanel { Margin = new Thickness(0, 0, 0, 12) };
-        row1.Children.Add(new TextBlock { Text = "当前谱面和弦调：", Width = 115, VerticalAlignment = VerticalAlignment.Center });
-        var fromBox = new ComboBox { ItemsSource = KeyNames, IsEditable = true, Text = string.IsNullOrWhiteSpace(song.SelectedKey) ? "C" : song.SelectedKey };
+        row1.Children.Add(new TextBlock
+        {
+            Text = "当前谱面和弦调：",
+            Width = 122,
+            FontSize = 12.5,
+            Foreground = AppDialogs.BodyBrush,
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        var fromBox = new ComboBox
+        {
+            ItemsSource = KeyNames,
+            IsEditable = true,
+            Text = string.IsNullOrWhiteSpace(song.SelectedKey) ? "C" : song.SelectedKey
+        };
         row1.Children.Add(fromBox);
         Grid.SetRow(row1, 0);
 
-        var row2 = new DockPanel { Margin = new Thickness(0, 0, 0, 12) };
-        row2.Children.Add(new TextBlock { Text = "转换到目标选调：", Width = 115, VerticalAlignment = VerticalAlignment.Center });
-        var toBox = new ComboBox { ItemsSource = KeyNames, IsEditable = true, Text = string.IsNullOrWhiteSpace(song.SelectedKey) ? "G" : song.SelectedKey };
+        var row2 = new DockPanel { Margin = new Thickness(0, 0, 0, 18) };
+        row2.Children.Add(new TextBlock
+        {
+            Text = "转换到目标选调：",
+            Width = 122,
+            FontSize = 12.5,
+            Foreground = AppDialogs.BodyBrush,
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        var toBox = new ComboBox
+        {
+            ItemsSource = KeyNames,
+            IsEditable = true,
+            Text = string.IsNullOrWhiteSpace(song.SelectedKey) ? "G" : song.SelectedKey
+        };
         row2.Children.Add(toBox);
         Grid.SetRow(row2, 1);
 
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-        var cancelBtn = new Button { Content = "取消", MinWidth = 72, Margin = new Thickness(0, 0, 8, 0), IsCancel = true };
-        var okBtn = new Button { Content = "确定移调", MinWidth = 84, Style = (Style)FindResource("PrimaryButton"), IsDefault = true };
-        okBtn.Click += (_, _) => dialog.DialogResult = true;
+        var cancelBtn = AppDialogs.CreateSecondaryButton(this, "取消", minWidth: 74);
+        cancelBtn.IsCancel = true;
+        cancelBtn.Margin = new Thickness(0, 0, 8, 0);
+        cancelBtn.Click += (_, _) => AppDialogs.CloseWithResult(dialog, false);
+
+        var okBtn = AppDialogs.CreatePrimaryButton(this, "确定移调", minWidth: 88);
+        okBtn.IsDefault = true;
+        okBtn.Click += (_, _) => AppDialogs.CloseWithResult(dialog, true);
+
         buttons.Children.Add(cancelBtn);
         buttons.Children.Add(okBtn);
-        Grid.SetRow(buttons, 3);
+        Grid.SetRow(buttons, 2);
 
         root.Children.Add(row1);
         root.Children.Add(row2);
         root.Children.Add(buttons);
-        dialog.Content = root;
 
         if (dialog.ShowDialog() != true) return;
         var fromKey = fromBox.Text.Trim();
         var toKey = toBox.Text.Trim();
         if (!ChordTranspose.TransposeSongKeys(song, fromKey, toKey))
         {
-            MessageBox.Show(this, "请输入有效的调名（例如 C → G 或 Am → Em）。", "移调提示", MessageBoxButton.OK, MessageBoxImage.Information);
+            AppDialogs.ShowInfo(this, "移调提示", "请输入有效的调名（例如 C → G 或 Am → Em）。");
             return;
         }
 
@@ -1005,7 +1046,7 @@ public partial class MainWindow : Window
         if (_selectedSong is null) return;
         var total = _selectedSong.Lines.Sum(x => x.Chords.Count);
         if (total == 0) return;
-        if (MessageBox.Show(this, $"确定清除当前曲谱上的全部 {total} 个和弦标记吗？（歌词内容会保留）", "清空和弦", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK)
+        if (!AppDialogs.Confirm(this, "清空和弦", $"确定清除当前曲谱上的全部 {total} 个和弦标记吗？（歌词内容会保留）", "确定清空", isDanger: true))
             return;
 
         foreach (var line in _selectedSong.Lines)
@@ -1121,68 +1162,8 @@ public partial class MainWindow : Window
         ScoreSurface.LayoutTransform = Math.Abs(scale - 1.0) < 0.01 ? Transform.Identity : new ScaleTransform(scale, scale);
     }
 
-    private string? PromptLyrics(string title, string label, string initial = "", double height = 360)
-    {
-        var dialog = new Window
-        {
-            Title = title,
-            Owner = this,
-            Width = 560,
-            Height = height,
-            ResizeMode = ResizeMode.CanResize,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Background = new SolidColorBrush(Color.FromRgb(248, 250, 252)),
-            FontFamily = FontFamily
-        };
-        var layout = new Grid { Margin = new Thickness(18) };
-        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-        var caption = new TextBlock
-        {
-            Text = label,
-            FontSize = 12.5,
-            Foreground = new SolidColorBrush(Color.FromRgb(71, 85, 105)),
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(1, 0, 0, 8)
-        };
-        var input = new TextBox
-        {
-            Text = initial,
-            AcceptsReturn = true,
-            TextWrapping = TextWrapping.Wrap,
-            VerticalContentAlignment = VerticalAlignment.Top,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            FontSize = 14,
-            Padding = new Thickness(10, 8, 10, 8)
-        };
-        Grid.SetRow(input, 1);
-
-        var buttons = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 14, 0, 0)
-        };
-        var cancel = new Button { Content = "取消", MinWidth = 76, Margin = new Thickness(0, 0, 8, 0), IsCancel = true };
-        var accept = new Button { Content = "确定", MinWidth = 84, Style = (Style)FindResource("PrimaryButton"), IsDefault = false };
-        accept.Click += (_, _) => dialog.DialogResult = true;
-        buttons.Children.Add(cancel);
-        buttons.Children.Add(accept);
-        Grid.SetRow(buttons, 2);
-
-        layout.Children.Add(caption);
-        layout.Children.Add(input);
-        layout.Children.Add(buttons);
-        dialog.Content = layout;
-        dialog.Loaded += (_, _) =>
-        {
-            input.Focus();
-            input.CaretIndex = input.Text.Length;
-        };
-        return dialog.ShowDialog() == true ? input.Text : null;
-    }
+    private string? PromptLyrics(string title, string label, string initial = "", double height = 360) =>
+        AppDialogs.PromptLyrics(this, title, label, initial, height);
 
     private static string SafeFileName(string value)
     {
@@ -1397,7 +1378,7 @@ public partial class MainWindow : Window
     {
         if (_selectedSong is null) return;
         var title = string.IsNullOrWhiteSpace(_selectedSong.Title) ? "未命名歌曲" : _selectedSong.Title;
-        if (MessageBox.Show(this, $"确定从本地曲库删除《{title}》吗？", "删除曲谱", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK)
+        if (!AppDialogs.Confirm(this, "删除曲谱", $"确定从本地曲库删除《{title}》吗？", "确定删除", isDanger: true))
             return;
 
         var toRemove = _selectedSong;
@@ -1534,64 +1515,8 @@ public partial class MainWindow : Window
         SetStatus($"已重命名为《{trimmed}》。");
     }
 
-    private string? PromptSingleLine(string title, string label, string initial = "")
-    {
-        var dialog = new Window
-        {
-            Title = title,
-            Owner = this,
-            Width = 380,
-            Height = 165,
-            ResizeMode = ResizeMode.NoResize,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Background = new SolidColorBrush(Color.FromRgb(248, 250, 252)),
-            FontFamily = FontFamily
-        };
-        var layout = new Grid { Margin = new Thickness(16) };
-        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-        var caption = new TextBlock
-        {
-            Text = label,
-            FontSize = 12.5,
-            Foreground = new SolidColorBrush(Color.FromRgb(71, 85, 105)),
-            Margin = new Thickness(0, 0, 0, 8)
-        };
-        var input = new TextBox
-        {
-            Text = initial,
-            FontSize = 13.5,
-            Padding = new Thickness(8, 5, 8, 5)
-        };
-        Grid.SetRow(input, 1);
-
-        var buttons = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 12, 0, 0)
-        };
-        var cancel = new Button { Content = "取消", MinWidth = 72, Margin = new Thickness(0, 0, 8, 0), IsCancel = true };
-        var accept = new Button { Content = "确定", MinWidth = 78, Style = (Style)FindResource("PrimaryButton"), IsDefault = true };
-        accept.Click += (_, _) => dialog.DialogResult = true;
-        buttons.Children.Add(cancel);
-        buttons.Children.Add(accept);
-        Grid.SetRow(buttons, 3);
-
-        layout.Children.Add(caption);
-        layout.Children.Add(input);
-        layout.Children.Add(buttons);
-        dialog.Content = layout;
-        dialog.Loaded += (_, _) =>
-        {
-            input.Focus();
-            input.SelectAll();
-        };
-        return dialog.ShowDialog() == true ? input.Text : null;
-    }
+    private string? PromptSingleLine(string title, string label, string initial = "") =>
+        AppDialogs.PromptSingleLine(this, title, label, initial);
 
     private void SaveLibraryQuietly()
     {
@@ -1668,108 +1593,155 @@ public partial class MainWindow : Window
 
     private void ShowUnconfiguredUpdateDialog()
     {
-        var dialog = new Window
-        {
-            Title = "检查更新 · 弦笺 StringNote",
-            Owner = this,
-            Width = 440,
-            Height = 230,
-            ResizeMode = ResizeMode.NoResize,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Background = new SolidColorBrush(Color.FromRgb(248, 250, 252)),
-            FontFamily = FontFamily
-        };
+        var dialog = AppDialogs.CreateCardWindow(
+            this,
+            "检查更新",
+            "弦笺 StringNote · 版本信息",
+            450,
+            null,
+            false,
+            out var layout);
 
-        var layout = new Grid { Margin = new Thickness(18) };
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        var header = new TextBlock
+        var versionPill = new Border
         {
-            Text = $"当前版本：v{UpdateService.CurrentVersion}",
-            FontSize = 15,
-            FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(Color.FromRgb(30, 41, 59)),
-            Margin = new Thickness(0, 0, 0, 10)
+            CornerRadius = new CornerRadius(6),
+            Background = AppDialogs.AccentLightBrush,
+            Padding = new Thickness(10, 5, 10, 5),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 0, 0, 12),
+            Child = new TextBlock
+            {
+                Text = $"当前版本：v{UpdateService.CurrentVersion}",
+                FontSize = 12.5,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = AppDialogs.AccentBrush
+            }
         };
+        Grid.SetRow(versionPill, 0);
+        layout.Children.Add(versionPill);
 
-        var body = new TextBlock
+        var bodyBox = new Border
         {
-            Text = "GitHub 自动更新仓库尚未绑定。\n在公开仓库创建后，只需将 UpdateService.cs 中的 DefaultOwner / DefaultRepo 配置为对应的 GitHub 用户名与仓库名，即可启用一键检查更新与自动安装。",
-            FontSize = 13,
-            TextWrapping = TextWrapping.Wrap,
-            Foreground = new SolidColorBrush(Color.FromRgb(71, 85, 105)),
-            LineHeight = 20
+            CornerRadius = new CornerRadius(8),
+            Background = AppDialogs.SubtleSurfaceBrush,
+            BorderBrush = AppDialogs.SubtleBorderBrush,
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(12, 10, 12, 10),
+            Child = new TextBlock
+            {
+                Text = "GitHub 自动更新仓库尚未绑定。\n在公开仓库创建后，只需将 UpdateService.cs 中的 DefaultOwner / DefaultRepo 配置为对应的 GitHub 用户名与仓库名，即可启用一键检查更新与自动安装。",
+                FontSize = 12.5,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = AppDialogs.BodyBrush,
+                LineHeight = 20
+            }
         };
-        Grid.SetRow(body, 1);
+        Grid.SetRow(bodyBox, 1);
+        layout.Children.Add(bodyBox);
 
-        var ok = new Button
+        var footer = new StackPanel
         {
-            Content = "知道了",
-            MinWidth = 84,
+            Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Right,
-            Style = (Style)FindResource("PrimaryButton"),
-            IsDefault = true,
-            IsCancel = true
+            Margin = new Thickness(0, 16, 0, 0)
         };
-        Grid.SetRow(ok, 2);
+        var ok = AppDialogs.CreatePrimaryButton(this, "知道了", minWidth: 88);
+        ok.IsDefault = true;
+        ok.IsCancel = true;
+        ok.Click += (_, _) => AppDialogs.CloseWithResult(dialog, true);
+        footer.Children.Add(ok);
+        Grid.SetRow(footer, 2);
+        layout.Children.Add(footer);
 
-        layout.Children.Add(header);
-        layout.Children.Add(body);
-        layout.Children.Add(ok);
-        dialog.Content = layout;
         dialog.ShowDialog();
     }
 
     private void ShowUpdateDialog(UpdateCheckResult? result, string? errorMessage = null)
     {
         var cts = new CancellationTokenSource();
-        var dialog = new Window
-        {
-            Title = "软件更新 · 弦笺 StringNote",
-            Owner = this,
-            Width = 500,
-            Height = 410,
-            ResizeMode = ResizeMode.NoResize,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Background = new SolidColorBrush(Color.FromRgb(248, 250, 252)),
-            FontFamily = FontFamily
-        };
-        dialog.Closed += (_, _) => cts.Cancel();
-
-        var layout = new Grid { Margin = new Thickness(18) };
-        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-        var versionPanel = new StackPanel { Margin = new Thickness(0, 0, 0, 10) };
         var titleText = result switch
         {
             { HasUpdate: true } => $"发现新版本 v{result.LatestVersion}",
             { HasUpdate: false } => "当前已是最新版本",
             _ => "暂时无法获取更新信息"
         };
-        versionPanel.Children.Add(new TextBlock
+        var dialog = AppDialogs.CreateCardWindow(
+            this,
+            titleText,
+            "软件更新 · 弦笺 StringNote",
+            510,
+            420,
+            false,
+            out var layout);
+        dialog.Closed += (_, _) => cts.Cancel();
+
+        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        var versionRow = new StackPanel
         {
-            Text = titleText,
-            FontSize = 16,
-            FontWeight = FontWeights.Bold,
-            Foreground = new SolidColorBrush(Color.FromRgb(30, 41, 59))
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(0, 0, 0, 10)
+        };
+        versionRow.Children.Add(new Border
+        {
+            CornerRadius = new CornerRadius(6),
+            Background = new SolidColorBrush(Color.FromRgb(241, 245, 249)),
+            Padding = new Thickness(9, 4, 9, 4),
+            Child = new TextBlock
+            {
+                Text = $"当前 v{UpdateService.CurrentVersion}",
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = AppDialogs.BodyBrush
+            }
         });
 
-        var subText = result is not null
-            ? $"当前版本：v{UpdateService.CurrentVersion}    最新版本：v{result.LatestVersion}"
-            : $"当前版本：v{UpdateService.CurrentVersion}" + (string.IsNullOrWhiteSpace(errorMessage) ? "" : $"    ({errorMessage})");
-        versionPanel.Children.Add(new TextBlock
+        if (result is not null)
         {
-            Text = subText,
-            FontSize = 12.5,
-            Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)),
-            Margin = new Thickness(0, 4, 0, 0)
-        });
-        layout.Children.Add(versionPanel);
+            versionRow.Children.Add(new TextBlock
+            {
+                Text = "→",
+                FontSize = 12,
+                Foreground = AppDialogs.MutedBrush,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(8, 0, 8, 0)
+            });
+            versionRow.Children.Add(new Border
+            {
+                CornerRadius = new CornerRadius(6),
+                Background = AppDialogs.AccentLightBrush,
+                Padding = new Thickness(9, 4, 9, 4),
+                Child = new TextBlock
+                {
+                    Text = $"最新 v{result.LatestVersion}",
+                    FontSize = 12,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = AppDialogs.AccentBrush
+                }
+            });
+        }
+        else if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            versionRow.Children.Add(new TextBlock
+            {
+                Text = errorMessage,
+                FontSize = 12,
+                Foreground = AppDialogs.MutedBrush,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(10, 0, 0, 0),
+                TextTrimming = TextTrimming.CharacterEllipsis
+            });
+        }
+
+        Grid.SetRow(versionRow, 0);
+        layout.Children.Add(versionRow);
 
         var notesText = result switch
         {
@@ -1778,48 +1750,63 @@ public partial class MainWindow : Window
             { HasUpdate: false } => "您正在使用最新发布的弦笺版本。",
             _ => "请检查网络连接，或点击下方「问题反馈 (GitHub)」前往项目页面查看。"
         };
-        var notesBox = new TextBox
+        var notesContainer = new Border
         {
-            Text = notesText,
-            IsReadOnly = true,
-            TextWrapping = TextWrapping.Wrap,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            VerticalContentAlignment = VerticalAlignment.Top,
-            Padding = new Thickness(10),
-            FontSize = 12.5,
-            Background = Brushes.White,
-            BorderBrush = new SolidColorBrush(Color.FromRgb(203, 213, 225)),
-            Margin = new Thickness(0, 0, 0, 10)
+            CornerRadius = new CornerRadius(8),
+            Background = AppDialogs.SubtleSurfaceBrush,
+            BorderBrush = AppDialogs.SubtleBorderBrush,
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(4),
+            Margin = new Thickness(0, 0, 0, 12),
+            Child = new TextBox
+            {
+                Text = notesText,
+                IsReadOnly = true,
+                TextWrapping = TextWrapping.Wrap,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                VerticalContentAlignment = VerticalAlignment.Top,
+                Padding = new Thickness(10, 8, 10, 8),
+                FontSize = 12.5,
+                Foreground = AppDialogs.BodyBrush,
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0)
+            }
         };
-        Grid.SetRow(notesBox, 1);
-        layout.Children.Add(notesBox);
+        Grid.SetRow(notesContainer, 1);
+        layout.Children.Add(notesContainer);
 
         var progressPanel = new StackPanel { Margin = new Thickness(0, 0, 0, 12), Visibility = Visibility.Collapsed };
         var progressStatus = new TextBlock
         {
             Text = "准备下载...",
             FontSize = 12,
-            Foreground = new SolidColorBrush(Color.FromRgb(71, 85, 105)),
-            Margin = new Thickness(0, 0, 0, 4)
+            Foreground = AppDialogs.BodyBrush,
+            Margin = new Thickness(0, 0, 0, 6)
         };
         var progressBar = new ProgressBar
         {
             Height = 8,
             Minimum = 0,
             Maximum = 1,
-            Value = 0
+            Value = 0,
+            Foreground = AppDialogs.AccentBrush,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0)
+        };
+        var progressTrack = new Border
+        {
+            CornerRadius = new CornerRadius(4),
+            Background = AppDialogs.SubtleBorderBrush,
+            ClipToBounds = true,
+            Child = progressBar
         };
         progressPanel.Children.Add(progressStatus);
-        progressPanel.Children.Add(progressBar);
+        progressPanel.Children.Add(progressTrack);
         Grid.SetRow(progressPanel, 2);
         layout.Children.Add(progressPanel);
 
         var footer = new DockPanel { LastChildFill = false };
-        var feedbackBtn = new Button
-        {
-            Content = "问题反馈 (GitHub)",
-            Padding = new Thickness(10, 6, 10, 6)
-        };
+        var feedbackBtn = AppDialogs.CreateSecondaryButton(this, "问题反馈 (GitHub)", minWidth: 120);
         feedbackBtn.Click += (_, _) => OpenExternalUrl(UpdateService.IssuesPageUrl);
         DockPanel.SetDock(feedbackBtn, Dock.Left);
         footer.Children.Add(feedbackBtn);
@@ -1827,22 +1814,14 @@ public partial class MainWindow : Window
         var rightButtons = new StackPanel { Orientation = Orientation.Horizontal };
         DockPanel.SetDock(rightButtons, Dock.Right);
 
-        var closeBtn = new Button
-        {
-            Content = "关闭",
-            MinWidth = 74,
-            IsCancel = true
-        };
+        var closeBtn = AppDialogs.CreateSecondaryButton(this, "关闭", minWidth: 74);
+        closeBtn.IsCancel = true;
+        closeBtn.Click += (_, _) => AppDialogs.CloseWithResult(dialog, false);
 
         if (result is { HasUpdate: true })
         {
-            var installBtn = new Button
-            {
-                Content = "下载并安装更新",
-                MinWidth = 124,
-                Margin = new Thickness(0, 0, 8, 0),
-                Style = (Style)FindResource("PrimaryButton")
-            };
+            var installBtn = AppDialogs.CreatePrimaryButton(this, "下载并安装更新", minWidth: 128);
+            installBtn.Margin = new Thickness(0, 0, 8, 0);
             installBtn.Click += async (_, _) =>
             {
                 if (string.IsNullOrWhiteSpace(result.DownloadUrl))
@@ -1886,8 +1865,63 @@ public partial class MainWindow : Window
         Grid.SetRow(footer, 3);
         layout.Children.Add(footer);
 
-        dialog.Content = layout;
         dialog.ShowDialog();
+    }
+
+    private void LoadWindowIcon()
+    {
+        try
+        {
+            using var iconStream = typeof(MainWindow).Assembly.GetManifestResourceStream("Xianpu.Desktop.Assets.StringNote.ico");
+            if (iconStream is not null)
+            {
+                Icon = BitmapFrame.Create(iconStream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+            }
+        }
+        catch
+        {
+            // Ignore icon load failures; Win32 ApplicationIcon remains active.
+        }
+    }
+
+    private void RestoreFromTray()
+    {
+        if (!IsVisible)
+            Show();
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
+        Activate();
+        Topmost = true;
+        Topmost = false;
+        Focus();
+    }
+
+    private void ExitApplication()
+    {
+        _isExplicitExit = true;
+        _trayService?.Dispose();
+        _trayService = null;
+        Application.Current.Shutdown();
+    }
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        if (!_isExplicitExit)
+        {
+            e.Cancel = true;
+            Hide();
+            _trayService?.ShowMinimizedTipOnce();
+            return;
+        }
+
+        base.OnClosing(e);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        _trayService?.Dispose();
+        _trayService = null;
+        base.OnClosed(e);
     }
 
     private static void OpenExternalUrl(string url)

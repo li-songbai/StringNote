@@ -364,40 +364,48 @@
             <Popup x:Name="ChordPopover" Grid.Column="1" PlacementTarget="{Binding ElementName=ScoreSurface}"
                    Placement="Top" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade"
                    Closed="ChordPopover_Closed">
-                <Border Background="#FFFFFF" BorderBrush="#2F6B48" BorderThickness="1.5" CornerRadius="8" Padding="10,8" Margin="6" Width="390">
+                <Border Background="#FFFFFF" BorderBrush="#2F6B48" BorderThickness="1.5" CornerRadius="12" Padding="14,12" Margin="10" Width="408">
                     <Border.Effect>
-                        <DropShadowEffect BlurRadius="16" ShadowDepth="4" Opacity="0.18" Color="#0F172A" />
+                        <DropShadowEffect BlurRadius="22" ShadowDepth="5" Opacity="0.18" Color="#0F172A" />
                     </Border.Effect>
                     <StackPanel>
-                        <DockPanel Margin="0,0,0,6">
-                            <TextBlock x:Name="PopoverTargetLabel" Text="进唱字位和弦" FontSize="11.5" FontWeight="SemiBold" Foreground="#2F6B48" VerticalAlignment="Center" />
+                        <DockPanel Margin="0,0,0,8">
+                            <Border Background="#EAF3ED" CornerRadius="6" Padding="8,3" VerticalAlignment="Center">
+                                <TextBlock x:Name="PopoverTargetLabel" Text="进唱字位和弦" FontSize="11.5" FontWeight="SemiBold" Foreground="#2F6B48" VerticalAlignment="Center" />
+                            </Border>
                             <TextBlock DockPanel.Dock="Right" Text="Enter 确定 · Tab 下一字" FontSize="10.5" Foreground="#94A3B8" VerticalAlignment="Center" HorizontalAlignment="Right" />
                         </DockPanel>
-                        <ScrollViewer x:Name="PopoverCharStripScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,7">
-                            <StackPanel x:Name="PopoverCharStrip" Orientation="Horizontal" />
-                        </ScrollViewer>
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,6">
-                            <TextBlock Text="位置：" FontSize="11" Foreground="#64748B" VerticalAlignment="Center" Margin="0,0,6,0" />
-                            <RadioButton x:Name="PosOnCharRadio" Content="在字上" GroupName="ChordPosGroup" IsChecked="True"
-                                         FontSize="11.5" VerticalAlignment="Center" Margin="0,0,12,0" Cursor="Hand"
-                                         Checked="PopoverPosition_Changed" />
-                            <RadioButton x:Name="PosBeforeCharRadio" Content="在字前" GroupName="ChordPosGroup"
-                                         FontSize="11.5" VerticalAlignment="Center" Cursor="Hand"
-                                         Checked="PopoverPosition_Changed" />
+                        <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="6,5" Margin="0,0,0,8">
+                            <ScrollViewer x:Name="PopoverCharStripScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                                <StackPanel x:Name="PopoverCharStrip" Orientation="Horizontal" />
+                            </ScrollViewer>
+                        </Border>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
+                            <TextBlock Text="位置：" FontSize="11.5" Foreground="#64748B" VerticalAlignment="Center" Margin="0,0,6,0" />
+                            <Border Background="#F1F5F9" CornerRadius="6" Padding="2">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <RadioButton x:Name="PosOnCharRadio" Content="在字上" GroupName="ChordPosGroup" IsChecked="True"
+                                                 FontSize="11.5" VerticalAlignment="Center" Padding="6,2" Margin="0,0,4,0" Cursor="Hand"
+                                                 Checked="PopoverPosition_Changed" />
+                                    <RadioButton x:Name="PosBeforeCharRadio" Content="在字前" GroupName="ChordPosGroup"
+                                                 FontSize="11.5" VerticalAlignment="Center" Padding="6,2" Cursor="Hand"
+                                                 Checked="PopoverPosition_Changed" />
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
-                        <Grid Margin="0,0,0,7">
+                        <Grid Margin="0,0,0,8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBox x:Name="InlineChordBox" Grid.Column="0" FontSize="14" FontWeight="Bold" Padding="8,4"
+                            <TextBox x:Name="InlineChordBox" Grid.Column="0" FontSize="14" FontWeight="Bold" Padding="9,5"
                                      PreviewKeyDown="InlineChordBox_PreviewKeyDown"
                                      ToolTip="直接输入任意左手和弦名称，例如 C、Am7、Fmaj7、G/B、Bm7-5、Cadd9" />
-                            <Button Grid.Column="1" Content="确定" Style="{StaticResource PrimaryButton}" Padding="10,4" Margin="5,0,0,0" Click="CommitInlineChord_Click" />
-                            <Button x:Name="DeleteInlineChordButton" Grid.Column="2" Content="删除" Padding="8,4" Margin="4,0,0,0" Foreground="#B91C1C" BorderBrush="#FECACA" Background="#FEF2F2" Click="DeleteInlineChord_Click" />
+                            <Button Grid.Column="1" Content="确定" Style="{StaticResource PrimaryButton}" Padding="11,5" Margin="6,0,0,0" Click="CommitInlineChord_Click" />
+                            <Button x:Name="DeleteInlineChordButton" Grid.Column="2" Content="删除" Padding="9,5" Margin="5,0,0,0" Foreground="#B91C1C" BorderBrush="#FECACA" Background="#FEF2F2" Click="DeleteInlineChord_Click" />
                         </Grid>
-                        <TextBlock Text="本调常用和弦（单击直接填入）：" FontSize="10.5" Foreground="#64748B" Margin="0,0,0,4" />
+                        <TextBlock Text="本调常用和弦（单击直接填入）：" FontSize="10.5" Foreground="#64748B" Margin="0,0,0,5" />
                         <WrapPanel x:Name="PopoverChordWrap" />
                     </StackPanel>
                 </Border>
