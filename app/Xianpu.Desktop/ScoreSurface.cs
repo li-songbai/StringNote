@@ -641,7 +641,7 @@ public sealed class ScoreSurface : FrameworkElement
         if (anchor.BeforeChar)
         {
             var barBrush = isCaret ? CaretBorder : HoverSlotBorder;
-            dc.DrawRectangle(barBrush, null, new Rect(x - 2, chordTopY + 2, 2, lyricY + 22 - (chordTopY + 2)));
+            dc.DrawRoundedRectangle(barBrush, null, new Rect(x - 3.5, lyricY + 3, 2.5, 20), 1, 1);
         }
         else if (isCaret)
         {
