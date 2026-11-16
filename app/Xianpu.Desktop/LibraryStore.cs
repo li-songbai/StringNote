@@ -78,7 +78,7 @@ public sealed class LibraryStore
         return song;
     }
 
-    private static void NormalizeSong(SongModel song)
+    public static void NormalizeSong(SongModel song)
     {
         song.Lines ??= [];
         foreach (var line in song.Lines)
@@ -92,6 +92,57 @@ public sealed class LibraryStore
                 chord.Name = ChordCatalog.NormalizeChordName(chord.Name);
                 if (string.IsNullOrWhiteSpace(chord.ShapeId))
                     chord.ShapeId = ChordCatalog.ByName(chord.Name)?.Id ?? "";
+            }
+        }
+
+        song.TabSections ??= [];
+        foreach (var section in song.TabSections)
+        {
+            section.Id = string.IsNullOrWhiteSpace(section.Id) ? Guid.NewGuid().ToString("N") : section.Id;
+            section.Title = string.IsNullOrWhiteSpace(section.Title)
+                ? section.Kind switch
+                {
+                    TabSectionKind.Intro => "前奏",
+                    TabSectionKind.Outro => "尾奏",
+                    _ => "间奏"
+                }
+                : section.Title.Trim();
+            section.TimeSignature = string.IsNullOrWhiteSpace(section.TimeSignature) ? "4/4" : section.TimeSignature.Trim();
+            section.ColumnsPerBar = Math.Clamp(section.ColumnsPerBar <= 0 ? 8 : section.ColumnsPerBar, 4, 16);
+            section.InsertAfterLineIndex = section.Kind switch
+            {
+                TabSectionKind.Intro => -1,
+                TabSectionKind.Outro => song.Lines.Count > 0 ? song.Lines.Count - 1 : -1,
+                _ => song.Lines.Count > 0 ? Math.Clamp(section.InsertAfterLineIndex, 0, song.Lines.Count - 1) : -1
+            };
+
+            section.Bars ??= [];
+            foreach (var bar in section.Bars)
+            {
+                bar.ColumnCount = Math.Clamp(bar.ColumnCount <= 0 ? section.ColumnsPerBar : bar.ColumnCount, 1, 16);
+                bar.Notes ??= [];
+                bar.Notes = bar.Notes
+                    .Where(n => n.StringIndex is >= 0 and <= 5 && n.Column >= 0 && n.Column < bar.ColumnCount && !string.IsNullOrWhiteSpace(n.Fret))
+                    .GroupBy(n => (n.Column, n.StringIndex))
+                    .Select(g =>
+                    {
+                        var last = g.Last();
+                        last.Fret = last.Fret.Trim();
+                        return last;
+                    })
+                    .ToList();
+
+                bar.ChordMarks ??= [];
+                bar.ChordMarks = bar.ChordMarks
+                    .Where(m => m.Column >= 0 && m.Column < bar.ColumnCount && !string.IsNullOrWhiteSpace(m.Text))
+                    .GroupBy(m => m.Column)
+                    .Select(g =>
+                    {
+                        var last = g.Last();
+                        last.Text = last.Text.Trim();
+                        return last;
+                    })
+                    .ToList();
             }
         }
     }

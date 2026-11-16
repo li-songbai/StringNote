@@ -43,15 +43,19 @@ public sealed class ScoreSurface : FrameworkElement
     private static readonly Pen CharSlotTickPen = FreezePen(new Pen(Freeze(new SolidColorBrush(Color.FromArgb(75, 110, 140, 115))), 0.8));
 
     private readonly List<RowLayout> _rows = [];
+    private readonly List<TabSectionLayout> _tabLayouts = [];
     private double _pixelsPerDip = 1;
     private int _columnCount = 1;
     private double _pageMarginCurrent = FlowMargin;
+    private double _twoColDividerTop = HeaderHeight + 4;
+    private double _twoColDividerBottom = HeaderHeight + 4;
     private Point? _pressPoint;
     private Hit? _pressedChord;
     private bool _draggingChord;
     private ChordAnchor? _dragTarget;
     private ChordAnchor? _caret;
     private ChordAnchor? _hoverAnchor;
+    private string? _hoverTabSectionId;
     private Hit? _selectedPlaced;
     private ChordShape? _externalDragShape;
     private ChordAnchor? _externalDragTarget;
@@ -75,6 +79,13 @@ public sealed class ScoreSurface : FrameworkElement
     public event Action<int>? LineSelected;
     public event Action<ChordAnchor, Rect, string?>? CharacterSlotClicked;
     public event Action<ChordAnchor, Rect, string>? QuickTypeStarted;
+    public event Action<TabSection>? TabSectionEditRequested;
+    public event Action<TabSection>? TabSectionDuplicateRequested;
+    public event Action<TabSection>? TabSectionDeleteRequested;
+    public event Action<TabSectionKind, int>? TabSectionInsertRequested;
+
+    public bool IsPointInteractive(Point point) =>
+        FindChord(point) is not null || GetAnchorAt(point) is not null || FindTabSection(point) is not null;
 
     private static Brush Freeze(SolidColorBrush brush)
     {
@@ -111,6 +122,7 @@ public sealed class ScoreSurface : FrameworkElement
         _selectedPlaced = null;
         _caret = null;
         _hoverAnchor = null;
+        _hoverTabSectionId = null;
         SelectionChanged?.Invoke();
         Rebuild();
     }
@@ -118,6 +130,7 @@ public sealed class ScoreSurface : FrameworkElement
     public void Rebuild()
     {
         _rows.Clear();
+        _tabLayouts.Clear();
         if (Song is null)
         {
             _columnCount = 1;
@@ -149,7 +162,8 @@ public sealed class ScoreSurface : FrameworkElement
         }
         Width = PaperWidthCurrent;
 
-        if (Song.Lines.Count == 0)
+        var showTabs = Song.ShowTabSections && Song.TabSections.Count > 0;
+        if (Song.Lines.Count == 0 && !showTabs)
         {
             Height = 320;
             InvalidateVisual();
@@ -162,13 +176,36 @@ public sealed class ScoreSurface : FrameworkElement
             ? (usableWidth - TwoColumnGap) / 2
             : usableWidth;
 
+        var introTabs = showTabs
+            ? Song.TabSections.Where(t => t.Kind == TabSectionKind.Intro || t.InsertAfterLineIndex < 0).ToList()
+            : [];
+        var interludesByLine = showTabs
+            ? Song.TabSections
+                .Where(t => t.Kind == TabSectionKind.Interlude && t.InsertAfterLineIndex >= 0 && t.InsertAfterLineIndex < Song.Lines.Count)
+                .GroupBy(t => t.InsertAfterLineIndex)
+                .ToDictionary(g => g.Key, g => g.ToList())
+            : new Dictionary<int, List<TabSection>>();
+        var outroTabs = showTabs
+            ? Song.TabSections.Where(t => t.Kind == TabSectionKind.Outro || (t.Kind == TabSectionKind.Interlude && t.InsertAfterLineIndex >= Song.Lines.Count)).ToList()
+            : [];
+
+        var topY = HeaderHeight;
+        foreach (var tab in introTabs)
+        {
+            var tabHeight = TabPainter.MeasureSectionHeight(tab, usableWidth);
+            _tabLayouts.Add(new TabSectionLayout(tab, new Rect(_pageMarginCurrent, topY, usableWidth, tabHeight)));
+            topY += tabHeight;
+        }
+
+        _twoColDividerTop = topY + 4;
+
         var isHorizontalFlow = Song.ColumnMode != 1 && Song.ColumnMode != 2;
         var leftCount = _columnCount == 2 ? (Song.Lines.Count + 1) / 2 : Song.Lines.Count;
-        var yLeft = HeaderHeight;
-        var yRight = HeaderHeight;
+        var yLeft = topY;
+        var yRight = topY;
 
         var curX = _pageMarginCurrent;
-        var curY = HeaderHeight;
+        var curY = topY;
         var phrasesInRow = 0;
         var rowMaxHeight = 0d;
 
@@ -244,11 +281,58 @@ public sealed class ScoreSurface : FrameworkElement
 
             var placements = BuildPlacements(index, line, chunks, rowLeft, rowTop);
             _rows.Add(new RowLayout(index, col, line, rowLeft, rowWidth, rowTop, height, chunks, placements));
+
+            if (interludesByLine.TryGetValue(index, out var lineTabs))
+            {
+                if (isHorizontalFlow)
+                {
+                    if (phrasesInRow > 0)
+                    {
+                        curY += rowMaxHeight;
+                        curX = _pageMarginCurrent;
+                        phrasesInRow = 0;
+                        rowMaxHeight = 0;
+                    }
+                    curY += 6;
+                    foreach (var tab in lineTabs)
+                    {
+                        var tabHeight = TabPainter.MeasureSectionHeight(tab, usableWidth);
+                        _tabLayouts.Add(new TabSectionLayout(tab, new Rect(_pageMarginCurrent, curY, usableWidth, tabHeight)));
+                        curY += tabHeight;
+                    }
+                }
+                else
+                {
+                    var tabLeft = col == 0 ? _pageMarginCurrent : _pageMarginCurrent + columnWidth + TwoColumnGap;
+                    if (col == 0) yLeft += 6; else yRight += 6;
+                    foreach (var tab in lineTabs)
+                    {
+                        var tabTop = col == 0 ? yLeft : yRight;
+                        var tabHeight = TabPainter.MeasureSectionHeight(tab, columnWidth);
+                        _tabLayouts.Add(new TabSectionLayout(tab, new Rect(tabLeft, tabTop, columnWidth, tabHeight)));
+                        if (col == 0) yLeft += tabHeight; else yRight += tabHeight;
+                    }
+                }
+            }
         }
 
         var yBottom = isHorizontalFlow
             ? curY + (phrasesInRow > 0 ? rowMaxHeight : 0)
             : Math.Max(yLeft, yRight);
+
+        _twoColDividerBottom = Math.Max(_twoColDividerTop, yBottom);
+
+        if (outroTabs.Count > 0)
+        {
+            yBottom += 8;
+            foreach (var tab in outroTabs)
+            {
+                var tabHeight = TabPainter.MeasureSectionHeight(tab, usableWidth);
+                _tabLayouts.Add(new TabSectionLayout(tab, new Rect(_pageMarginCurrent, yBottom, usableWidth, tabHeight)));
+                yBottom += tabHeight;
+            }
+        }
+
         Height = Math.Max(yBottom, 260) + 36;
         InvalidateVisual();
     }
@@ -568,17 +652,41 @@ public sealed class ScoreSurface : FrameworkElement
             DrawCentered(dc, metadata, 13.5, 57, LyricTypeface, Quiet);
         dc.DrawLine(new Pen(Rule, 1), new Point(_pageMarginCurrent, 82), new Point(PaperWidthCurrent - _pageMarginCurrent, 82));
 
-        if (_rows.Count == 0)
+        if (_rows.Count == 0 && _tabLayouts.Count == 0)
         {
             DrawCentered(dc, "这首曲谱还没有歌词", 16, HeaderHeight + 54, ChordTypeface, Quiet);
-            DrawCentered(dc, "点击上方「导入 LRC」或「编辑全文歌词」铺开歌词，再点击字位填入左手和弦", 12.5, HeaderHeight + 84, LyricTypeface, Quiet);
+            DrawCentered(dc, "点击上方「导入 LRC」或「编辑歌词」铺开歌词，再点击字位填入左手和弦；也可点击「+ 六线谱」添加前奏/间奏", 12.5, HeaderHeight + 84, LyricTypeface, Quiet);
             return;
         }
 
-        if (_columnCount == 2)
+        if (_columnCount == 2 && _rows.Count > 0)
         {
             var dividerX = PaperWidthCurrent / 2;
-            dc.DrawLine(new Pen(ColumnRule, 1), new Point(dividerX, HeaderHeight + 4), new Point(dividerX, Height - 24));
+            dc.DrawLine(new Pen(ColumnRule, 1), new Point(dividerX, _twoColDividerTop), new Point(dividerX, _twoColDividerBottom));
+        }
+
+        foreach (var tabLayout in _tabLayouts)
+        {
+            if (!IsExporting && _hoverTabSectionId == tabLayout.Section.Id)
+            {
+                var highlightRect = new Rect(
+                    tabLayout.Bounds.Left - 8,
+                    tabLayout.Bounds.Top - 4,
+                    tabLayout.Bounds.Width + 16,
+                    tabLayout.Bounds.Height + 2);
+                dc.DrawRoundedRectangle(HoverSlotFill, new Pen(HoverSlotBorder, 1), highlightRect, 6, 6);
+                var editHint = Measure("点击编辑六线谱", 10.5, LyricTypeface);
+                DrawText(dc, "点击编辑六线谱", tabLayout.Bounds.Right - editHint.Width - 2, tabLayout.Bounds.Top + 3, 10.5, LyricTypeface, Green);
+            }
+
+            TabPainter.DrawSection(
+                dc,
+                tabLayout.Section,
+                tabLayout.Bounds.Left,
+                tabLayout.Bounds.Top,
+                tabLayout.Bounds.Width,
+                Background,
+                _pixelsPerDip);
         }
 
         if (!IsExporting && _hoverAnchor is { } hover && (_caret is null || hover != _caret))
@@ -675,7 +783,23 @@ public sealed class ScoreSurface : FrameworkElement
             e.Handled = true;
             return;
         }
-        _pressedChord = FindChord(point);
+
+        var hitChord = FindChord(point);
+        var hitAnchor = hitChord is null ? GetAnchorAt(point) : null;
+        var hitTab = hitChord is null && hitAnchor is null ? FindTabSection(point) : null;
+
+        if (hitChord is null && hitAnchor is null && hitTab is null)
+        {
+            if (_selectedPlaced is not null)
+            {
+                _selectedPlaced = null;
+                SelectionChanged?.Invoke();
+                InvalidateVisual();
+            }
+            return;
+        }
+
+        _pressedChord = hitChord;
         _pressPoint = point;
         _draggingChord = false;
         _dragTarget = null;
@@ -691,10 +815,14 @@ public sealed class ScoreSurface : FrameworkElement
         {
             var hover = GetAnchorAt(point);
             var overChord = FindChord(point) is not null;
-            Cursor = hover is not null || overChord ? Cursors.Hand : Cursors.Arrow;
-            if (hover != _hoverAnchor)
+            var overTab = hover is null && !overChord ? FindTabSection(point) : null;
+            var nextTabId = overTab?.Section.Id;
+
+            Cursor = hover is not null || overChord || overTab is not null ? Cursors.Hand : Cursors.Arrow;
+            if (hover != _hoverAnchor || nextTabId != _hoverTabSectionId)
             {
                 _hoverAnchor = hover;
+                _hoverTabSectionId = nextTabId;
                 InvalidateVisual();
             }
             return;
@@ -717,9 +845,10 @@ public sealed class ScoreSurface : FrameworkElement
     protected override void OnMouseLeave(MouseEventArgs e)
     {
         base.OnMouseLeave(e);
-        if (_hoverAnchor is not null)
+        if (_hoverAnchor is not null || _hoverTabSectionId is not null)
         {
             _hoverAnchor = null;
+            _hoverTabSectionId = null;
             InvalidateVisual();
         }
     }
@@ -807,6 +936,13 @@ public sealed class ScoreSurface : FrameworkElement
                 CharacterSlotClicked?.Invoke(anchor, GetAnchorRect(anchor), GetChordAt(anchor));
             }
         }
+        else if (FindTabSection(point) is { } tabHit)
+        {
+            _selectedPlaced = null;
+            SelectionChanged?.Invoke();
+            InvalidateVisual();
+            TabSectionEditRequested?.Invoke(tabHit.Section);
+        }
         else
         {
             _selectedPlaced = null;
@@ -846,6 +982,46 @@ public sealed class ScoreSurface : FrameworkElement
             removeItem.Click += (_, _) => RemoveSelectedChord();
             menu.Items.Add(editItem);
             menu.Items.Add(removeItem);
+            menu.IsOpen = true;
+            e.Handled = true;
+            return;
+        }
+
+        var tabHit = FindTabSection(point);
+        if (tabHit is not null && Song is not null)
+        {
+            Focus();
+            var menu = new System.Windows.Controls.ContextMenu { PlacementTarget = this };
+            var editItem = new System.Windows.Controls.MenuItem { Header = $"编辑六线谱「{tabHit.Section.Title}」..." };
+            editItem.Click += (_, _) => TabSectionEditRequested?.Invoke(tabHit.Section);
+            var dupItem = new System.Windows.Controls.MenuItem { Header = "复制此六线谱段落" };
+            dupItem.Click += (_, _) => TabSectionDuplicateRequested?.Invoke(tabHit.Section);
+            var delItem = new System.Windows.Controls.MenuItem { Header = "删除此六线谱段落" };
+            delItem.Click += (_, _) => TabSectionDeleteRequested?.Invoke(tabHit.Section);
+            menu.Items.Add(editItem);
+            menu.Items.Add(dupItem);
+            menu.Items.Add(new System.Windows.Controls.Separator());
+            menu.Items.Add(delItem);
+            menu.IsOpen = true;
+            e.Handled = true;
+            return;
+        }
+
+        var lineAnchor = GetAnchorAt(point);
+        if (lineAnchor is not null && Song is not null)
+        {
+            Focus();
+            var menu = new System.Windows.Controls.ContextMenu { PlacementTarget = this };
+            var editLineItem = new System.Windows.Controls.MenuItem { Header = "编辑此行歌词..." };
+            editLineItem.Click += (_, _) => LineEditRequested?.Invoke(lineAnchor.LineIndex);
+            var insertInterludeItem = new System.Windows.Controls.MenuItem { Header = "在此句后插入间奏六线谱..." };
+            insertInterludeItem.Click += (_, _) => TabSectionInsertRequested?.Invoke(TabSectionKind.Interlude, lineAnchor.LineIndex);
+            var insertIntroItem = new System.Windows.Controls.MenuItem { Header = "在开头添加前奏六线谱..." };
+            insertIntroItem.Click += (_, _) => TabSectionInsertRequested?.Invoke(TabSectionKind.Intro, -1);
+            menu.Items.Add(editLineItem);
+            menu.Items.Add(new System.Windows.Controls.Separator());
+            menu.Items.Add(insertInterludeItem);
+            menu.Items.Add(insertIntroItem);
             menu.IsOpen = true;
             e.Handled = true;
         }
@@ -1163,8 +1339,24 @@ public sealed class ScoreSurface : FrameworkElement
     private static void SortChords(LyricLine line) =>
         line.Chords = line.Chords.OrderBy(x => x.Position).ThenBy(x => x.BeforeChar ? 0 : 1).ToList();
 
+    private TabSectionLayout? FindTabSection(Point point)
+    {
+        foreach (var layout in _tabLayouts)
+        {
+            var hitRect = new Rect(
+                layout.Bounds.Left - 8,
+                layout.Bounds.Top - 4,
+                layout.Bounds.Width + 16,
+                layout.Bounds.Height + 2);
+            if (hitRect.Contains(point))
+                return layout;
+        }
+        return null;
+    }
+
     private sealed record TextChunk(int Index, int Start, int End, string Text, double Top = 0, double LyricTop = 0);
     private sealed record Placement(int LineIndex, int ChordIndex, ChordPlacement Chord, double X, double AnchorX, double CharWidth, string TargetChar, double Y, int ChunkIndex);
     private sealed record RowLayout(int Index, int Column, LyricLine Line, double Left, double Width, double Top, double Height, List<TextChunk> Chunks, List<Placement> Placements);
+    private sealed record TabSectionLayout(TabSection Section, Rect Bounds);
     private sealed record Hit(int LineIndex, int ChordIndex);
 }

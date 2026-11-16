@@ -21,6 +21,7 @@ public sealed class SongModel : INotifyPropertyChanged
     private string _chordDisplayMode = "name";
     private int _columnMode = 0; // 0 = auto (2 columns when Lines.Count > 14, else 1), 1 = 1 col, 2 = 2 cols
     private bool _showChordGuide = false;
+    private bool _showTabSections = true;
 
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Title { get => _title; set => Set(ref _title, value); }
@@ -32,8 +33,10 @@ public sealed class SongModel : INotifyPropertyChanged
     public string ChordDisplayMode { get => _chordDisplayMode; set => Set(ref _chordDisplayMode, value); }
     public int ColumnMode { get => _columnMode; set => Set(ref _columnMode, value); }
     public bool ShowChordGuide { get => _showChordGuide; set => Set(ref _showChordGuide, value); }
+    public bool ShowTabSections { get => _showTabSections; set => Set(ref _showTabSections, value); }
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
     public ObservableCollection<LyricLine> Lines { get; set; } = [];
+    public ObservableCollection<TabSection> TabSections { get; set; } = [];
     public string ListSummary => string.Join(" · ", new[] { Category, SelectedKey, Capo }.Where(x => !string.IsNullOrWhiteSpace(x)));
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -76,4 +79,60 @@ public sealed class ChordShape
     public int BaseFret { get; init; } = 1;
     public BarreShape? Barre { get; init; }
     public string Label { get; init; } = "开放和弦";
+}
+
+public enum TabSectionKind
+{
+    Intro,
+    Interlude,
+    Outro
+}
+
+public sealed class TabSection
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public TabSectionKind Kind { get; set; } = TabSectionKind.Intro;
+    public string Title { get; set; } = "前奏";
+    public int InsertAfterLineIndex { get; set; } = -1; // -1 = 前奏(歌词前), >= 0 = 插在对应歌词行后
+    public string TimeSignature { get; set; } = "4/4";
+    public int ColumnsPerBar { get; set; } = 8;
+    public List<TabBar> Bars { get; set; } = [];
+
+    public TabSection Clone() => new()
+    {
+        Id = Guid.NewGuid().ToString("N"),
+        Kind = Kind,
+        Title = Title,
+        InsertAfterLineIndex = InsertAfterLineIndex,
+        TimeSignature = TimeSignature,
+        ColumnsPerBar = ColumnsPerBar,
+        Bars = Bars.Select(b => b.Clone()).ToList()
+    };
+}
+
+public sealed class TabBar
+{
+    public int ColumnCount { get; set; } = 8;
+    public List<TabNote> Notes { get; set; } = [];
+    public List<TabChordMark> ChordMarks { get; set; } = [];
+
+    public TabBar Clone() => new()
+    {
+        ColumnCount = ColumnCount,
+        Notes = Notes.Select(n => new TabNote { Column = n.Column, StringIndex = n.StringIndex, Fret = n.Fret }).ToList(),
+        ChordMarks = ChordMarks.Select(m => new TabChordMark { Column = m.Column, Text = m.Text }).ToList()
+    };
+}
+
+public sealed class TabNote
+{
+    public int Column { get; set; }
+    public int StringIndex { get; set; } // 0 = 1弦(e) .. 5 = 6弦(E)
+    public string Fret { get; set; } = "";
+}
+
+public sealed class TabChordMark
+{
+    public int Column { get; set; }
+    public string Text { get; set; } = "";
 }

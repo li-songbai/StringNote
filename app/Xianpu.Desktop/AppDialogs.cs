@@ -48,10 +48,14 @@ internal static class AppDialogs
         string badgeText = "笺",
         Color? badgeColor = null)
     {
+        var workArea = SystemParameters.WorkArea;
+        var clampedWidth = Math.Min(width + 28, Math.Max(340, workArea.Width - 24));
         var window = new Window
         {
             Title = title,
-            Width = width + 28,
+            Width = clampedWidth,
+            MaxWidth = Math.Max(340, workArea.Width - 16),
+            MaxHeight = Math.Max(260, workArea.Height - 16),
             WindowStyle = WindowStyle.None,
             AllowsTransparency = true,
             Background = Brushes.Transparent,
@@ -73,11 +77,12 @@ internal static class AppDialogs
 
         if (height.HasValue)
         {
-            window.Height = height.Value + 28;
+            var clampedHeight = Math.Min(height.Value + 28, Math.Max(260, workArea.Height - 24));
+            window.Height = clampedHeight;
             if (resizable)
             {
-                window.MinWidth = Math.Min(width + 28, 420);
-                window.MinHeight = Math.Min(height.Value + 28, 280);
+                window.MinWidth = Math.Min(clampedWidth, 420);
+                window.MinHeight = Math.Min(clampedHeight, 280);
             }
         }
         else

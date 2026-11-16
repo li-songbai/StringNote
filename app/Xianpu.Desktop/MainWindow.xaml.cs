@@ -3,10 +3,12 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -24,7 +26,12 @@ public partial class MainWindow : Window
     private string _popoverInitialChord = "";
     private bool _syncingPopoverPosition;
     private TrayService? _trayService;
-    private bool _isExplicitExit;
+    private double _savedLibraryWidth = 236;
+    private double? _manualZoom;
+    private bool _isPanning;
+    private Point _panOrigin;
+    private double _panStartH;
+    private double _panStartV;
     private const string AllCategoriesLabel = "全部分类";
 
     private static readonly string[] KeyNames =
@@ -41,7 +48,15 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        ApplyAdaptiveInitialWindowSize();
         LoadWindowIcon();
+
+        SourceInitialized += (_, _) =>
+        {
+            if (PresentationSource.FromVisual(this) is HwndSource source)
+                source.AddHook(WindowProc);
+        };
+        StateChanged += (_, _) => UpdateMaximizeVisual();
 
         OriginalKeyBox.ItemsSource = KeyNames;
         SelectedKeyBox.ItemsSource = KeyNames;
@@ -69,6 +84,10 @@ public partial class MainWindow : Window
         ScoreSurface.LineEditRequested += EditLyricLine;
         ScoreSurface.CharacterSlotClicked += OnCharacterSlotClicked;
         ScoreSurface.QuickTypeStarted += OnQuickTypeStarted;
+        ScoreSurface.TabSectionEditRequested += EditTabSection;
+        ScoreSurface.TabSectionDuplicateRequested += DuplicateTabSection;
+        ScoreSurface.TabSectionDeleteRequested += DeleteTabSection;
+        ScoreSurface.TabSectionInsertRequested += InsertNewTabSection;
 
         Loaded += (_, _) =>
         {
@@ -76,10 +95,31 @@ public partial class MainWindow : Window
             {
                 LoadFromFilePath(App.StartupFilePath);
             }
+            UpdateMaximizeVisual();
             UpdateViewportScale();
             ScoreSurface.Focus();
             _ = CheckForUpdatesSilentlyAsync();
         };
+    }
+
+    private void ApplyAdaptiveInitialWindowSize()
+    {
+        var workArea = SystemParameters.WorkArea;
+        if (workArea.Width <= 0 || workArea.Height <= 0) return;
+
+        var targetWidth = Math.Floor(workArea.Width * 0.90);
+        var targetHeight = Math.Floor(workArea.Height * 0.90);
+        MinWidth = Math.Min(700, Math.Max(560, Math.Floor(workArea.Width * 0.65)));
+        MinHeight = Math.Min(500, Math.Max(420, Math.Floor(workArea.Height * 0.65)));
+
+        Width = Math.Clamp(targetWidth, MinWidth, 1240);
+        Height = Math.Clamp(targetHeight, MinHeight, 780);
+
+        if (workArea.Width < 1180 && LibraryColumn is not null)
+        {
+            _savedLibraryWidth = 210;
+            LibraryColumn.Width = new GridLength(_savedLibraryWidth);
+        }
     }
 
     private void LoadInitialState()
@@ -174,6 +214,7 @@ public partial class MainWindow : Window
         _initializing = false;
 
         UpdateFavoriteToggleVisual();
+        UpdateCaptionTitle();
         ScoreSurface.SetSong(song);
         song.PropertyChanged += SelectedSong_PropertyChanged;
         RefreshQuickChordBar();
@@ -181,6 +222,13 @@ public partial class MainWindow : Window
         RefreshLibraryList();
         UpdateActionStates();
         UpdateViewportScale();
+    }
+
+    private void UpdateCaptionTitle()
+    {
+        if (CaptionSongTitle is null) return;
+        var title = string.IsNullOrWhiteSpace(_selectedSong?.Title) ? "吉他歌词和弦记谱" : _selectedSong!.Title.Trim();
+        CaptionSongTitle.Text = $"· {title}";
     }
 
     private void SelectedSong_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -192,10 +240,16 @@ public partial class MainWindow : Window
             or nameof(SongModel.Capo)
             or nameof(SongModel.ChordDisplayMode)
             or nameof(SongModel.ColumnMode)
-            or nameof(SongModel.ShowChordGuide))
+            or nameof(SongModel.ShowChordGuide)
+            or nameof(SongModel.ShowTabSections))
         {
             ScoreSurface.Rebuild();
             UpdateViewportScale();
+            UpdateActionStates();
+        }
+        if (e.PropertyName == nameof(SongModel.Title))
+        {
+            UpdateCaptionTitle();
         }
         if (e.PropertyName == nameof(SongModel.SelectedKey))
         {
@@ -1000,6 +1054,7 @@ public partial class MainWindow : Window
         song.Lines.Clear();
         foreach (var line in result)
             song.Lines.Add(line);
+        LibraryStore.NormalizeSong(song);
     }
 
     private void EditLyricLine(int index)
@@ -1030,6 +1085,7 @@ public partial class MainWindow : Window
                 _selectedSong.Lines.Insert(index + i, new LyricLine { Text = newLines[i] });
         }
 
+        LibraryStore.NormalizeSong(_selectedSong);
         ScoreSurface.SetSong(_selectedSong);
         UpdateViewportScale();
         SaveLibraryQuietly();
@@ -1046,7 +1102,7 @@ public partial class MainWindow : Window
         if (_selectedSong is null) return;
         var total = _selectedSong.Lines.Sum(x => x.Chords.Count);
         if (total == 0) return;
-        if (!AppDialogs.Confirm(this, "清空和弦", $"确定清除当前曲谱上的全部 {total} 个和弦标记吗？（歌词内容会保留）", "确定清空", isDanger: true))
+        if (!AppDialogs.Confirm(this, "清空和弦", $"确定清除当前曲谱上的全部 {total} 个和弦标记吗？（歌词内容会保留，前奏/间奏六线谱不受影响）", "确定清空", isDanger: true))
             return;
 
         foreach (var line in _selectedSong.Lines)
@@ -1055,13 +1111,170 @@ public partial class MainWindow : Window
         ScoreSurface.Rebuild();
         UpdateActionStates();
         SaveLibraryQuietly();
-        SetStatus("已清空整首歌上的所有和弦标记。");
+        SetStatus("已清空整首歌词上的所有和弦标记（六线谱段落已保留）。");
     }
 
     private void UpdateActionStates()
     {
         if (RemoveChordButton is not null)
             RemoveChordButton.IsEnabled = ScoreSurface.HasSelectedChord;
+
+        if (TabSectionButton is not null && _selectedSong is not null)
+        {
+            var count = _selectedSong.TabSections.Count;
+            if (count == 0)
+                TabSectionButton.Content = "+ 六线谱 (可选)";
+            else if (!_selectedSong.ShowTabSections)
+                TabSectionButton.Content = $"六线谱 ({count} · 已隐藏)";
+            else
+                TabSectionButton.Content = $"六线谱 ({count})";
+        }
+    }
+
+    private void TabSectionMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedSong is null || TabSectionButton is null) return;
+
+        var menu = new ContextMenu { PlacementTarget = TabSectionButton, Placement = PlacementMode.Bottom };
+
+        var addIntro = new MenuItem { Header = "+ 添加前奏六线谱（歌曲开头）..." };
+        addIntro.Click += (_, _) => InsertNewTabSection(TabSectionKind.Intro, -1);
+        menu.Items.Add(addIntro);
+
+        var defaultLine = ScoreSurface.SelectedLineIndex is { } sel && sel >= 0 && sel < _selectedSong.Lines.Count
+            ? sel
+            : Math.Max(0, _selectedSong.Lines.Count / 2 - 1);
+        var addInterlude = new MenuItem { Header = "+ 添加间奏六线谱（歌词句间）..." };
+        addInterlude.Click += (_, _) => InsertNewTabSection(TabSectionKind.Interlude, defaultLine);
+        menu.Items.Add(addInterlude);
+
+        var addOutro = new MenuItem { Header = "+ 添加尾奏六线谱（歌曲结尾）..." };
+        addOutro.Click += (_, _) => InsertNewTabSection(TabSectionKind.Outro, Math.Max(0, _selectedSong.Lines.Count - 1));
+        menu.Items.Add(addOutro);
+
+        if (_selectedSong.TabSections.Count > 0)
+        {
+            menu.Items.Add(new Separator());
+
+            var toggleVisible = new MenuItem
+            {
+                Header = "在谱面上显示六线谱组件",
+                IsCheckable = true,
+                IsChecked = _selectedSong.ShowTabSections
+            };
+            toggleVisible.Click += (_, _) =>
+            {
+                _selectedSong.ShowTabSections = !_selectedSong.ShowTabSections;
+                ScoreSurface.Rebuild();
+                UpdateViewportScale();
+                UpdateActionStates();
+                SaveLibraryQuietly();
+            };
+            menu.Items.Add(toggleVisible);
+            menu.Items.Add(new Separator());
+
+            foreach (var section in _selectedSong.TabSections.ToList())
+            {
+                var posDesc = section.Kind switch
+                {
+                    TabSectionKind.Intro => "开头",
+                    TabSectionKind.Outro => "结尾",
+                    _ => section.InsertAfterLineIndex >= 0 ? $"第 {section.InsertAfterLineIndex + 1} 句后" : "句间"
+                };
+                var item = new MenuItem { Header = $"✎ 编辑「{section.Title}」（{posDesc} · {section.Bars.Count} 小节）" };
+                item.Click += (_, _) => EditTabSection(section);
+                menu.Items.Add(item);
+            }
+
+            menu.Items.Add(new Separator());
+            var clearTabs = new MenuItem { Header = "删除全部六线谱段落..." };
+            clearTabs.Click += (_, _) =>
+            {
+                if (!AppDialogs.Confirm(this, "删除六线谱", $"确定移除当前歌曲的全部 {_selectedSong.TabSections.Count} 个六线谱段落吗？", "确定删除", isDanger: true))
+                    return;
+                _selectedSong.TabSections.Clear();
+                ScoreSurface.Rebuild();
+                UpdateViewportScale();
+                UpdateActionStates();
+                SaveLibraryQuietly();
+                SetStatus("已移除所有六线谱段落。");
+            };
+            menu.Items.Add(clearTabs);
+        }
+
+        menu.IsOpen = true;
+    }
+
+    private void InsertNewTabSection(TabSectionKind kind, int insertAfterLineIndex)
+    {
+        if (_selectedSong is null) return;
+        var result = TabEditorWindow.Show(this, null, _selectedSong.Lines, kind, insertAfterLineIndex);
+        if (!result.Saved || result.Section is null) return;
+
+        _selectedSong.ShowTabSections = true;
+        _selectedSong.TabSections.Add(result.Section);
+        LibraryStore.NormalizeSong(_selectedSong);
+        ScoreSurface.Rebuild();
+        UpdateViewportScale();
+        UpdateActionStates();
+        SaveLibraryQuietly();
+        SetStatus($"已添加六线谱段落「{result.Section.Title}」（不受全谱变调影响）。");
+    }
+
+    private void EditTabSection(TabSection section)
+    {
+        if (_selectedSong is null) return;
+        var idx = _selectedSong.TabSections.IndexOf(section);
+        if (idx < 0) return;
+
+        var result = TabEditorWindow.Show(this, section, _selectedSong.Lines);
+        if (result.Deleted)
+        {
+            _selectedSong.TabSections.RemoveAt(idx);
+            ScoreSurface.Rebuild();
+            UpdateViewportScale();
+            UpdateActionStates();
+            SaveLibraryQuietly();
+            SetStatus($"已删除六线谱段落「{section.Title}」。");
+            return;
+        }
+        if (!result.Saved || result.Section is null) return;
+
+        result.Section.Id = section.Id;
+        _selectedSong.TabSections[idx] = result.Section;
+        LibraryStore.NormalizeSong(_selectedSong);
+        ScoreSurface.Rebuild();
+        UpdateViewportScale();
+        UpdateActionStates();
+        SaveLibraryQuietly();
+        SetStatus($"已更新六线谱段落「{result.Section.Title}」（不受全谱变调影响）。");
+    }
+
+    private void DuplicateTabSection(TabSection section)
+    {
+        if (_selectedSong is null) return;
+        var copy = section.Clone();
+        copy.Title = string.IsNullOrWhiteSpace(section.Title) ? "六线谱 (副本)" : section.Title + " (副本)";
+        _selectedSong.TabSections.Add(copy);
+        LibraryStore.NormalizeSong(_selectedSong);
+        ScoreSurface.Rebuild();
+        UpdateViewportScale();
+        UpdateActionStates();
+        SaveLibraryQuietly();
+        SetStatus($"已复制六线谱段落「{copy.Title}」。");
+    }
+
+    private void DeleteTabSection(TabSection section)
+    {
+        if (_selectedSong is null) return;
+        if (!AppDialogs.Confirm(this, "删除六线谱", $"确定删除六线谱段落「{section.Title}」吗？", "确定删除", isDanger: true))
+            return;
+        _selectedSong.TabSections.Remove(section);
+        ScoreSurface.Rebuild();
+        UpdateViewportScale();
+        UpdateActionStates();
+        SaveLibraryQuietly();
+        SetStatus($"已删除六线谱段落「{section.Title}」。");
     }
 
     private void SongField_TextChanged(object sender, TextChangedEventArgs e)
@@ -1157,9 +1370,101 @@ public partial class MainWindow : Window
     {
         if (ScoreSurface is null || ScoreScrollViewer is null || ScoreScrollViewer.ActualWidth <= 0) return;
         var paperWidth = ScoreSurface.PaperWidthCurrent > 0 ? ScoreSurface.PaperWidthCurrent : ScoreSurface.Width;
-        var available = ScoreScrollViewer.ActualWidth - 56;
-        var scale = Math.Clamp(available / paperWidth, 0.55, 1.0);
+        var available = Math.Max(320, ScoreScrollViewer.ActualWidth - 48);
+        var fitScale = Math.Clamp(available / paperWidth, 0.50, 1.0);
+        var scale = _manualZoom ?? fitScale;
         ScoreSurface.LayoutTransform = Math.Abs(scale - 1.0) < 0.01 ? Transform.Identity : new ScaleTransform(scale, scale);
+
+        if (ZoomPercentText is not null)
+            ZoomPercentText.Text = _manualZoom is null ? $"适应 {scale * 100:0}%" : $"{scale * 100:0}%";
+    }
+
+    private void ZoomIn_Click(object sender, RoutedEventArgs e) => AdjustZoom(0.1);
+
+    private void ZoomOut_Click(object sender, RoutedEventArgs e) => AdjustZoom(-0.1);
+
+    private void ZoomFit_Click(object sender, RoutedEventArgs e)
+    {
+        _manualZoom = null;
+        UpdateViewportScale();
+    }
+
+    private void AdjustZoom(double delta)
+    {
+        if (ScoreSurface is null || ScoreScrollViewer is null) return;
+        var paperWidth = ScoreSurface.PaperWidthCurrent > 0 ? ScoreSurface.PaperWidthCurrent : ScoreSurface.Width;
+        var available = Math.Max(320, ScoreScrollViewer.ActualWidth - 48);
+        var current = _manualZoom ?? Math.Clamp(available / paperWidth, 0.50, 1.0);
+        _manualZoom = Math.Clamp(Math.Round((current + delta) * 20) / 20.0, 0.50, 1.60);
+        UpdateViewportScale();
+    }
+
+    private void ScoreScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        {
+            AdjustZoom(e.Delta > 0 ? 0.1 : -0.1);
+            e.Handled = true;
+        }
+    }
+
+    private void ScoreScrollViewer_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (ScoreScrollViewer is null || ScoreSurface is null) return;
+        if (IsInsideScrollBar(e.OriginalSource as DependencyObject)) return;
+
+        var isMiddle = e.ChangedButton == MouseButton.Middle;
+        var isBlankLeft = e.ChangedButton == MouseButton.Left &&
+                          !ScoreSurface.IsPointInteractive(e.GetPosition(ScoreSurface));
+
+        if (isMiddle || isBlankLeft)
+        {
+            _isPanning = true;
+            _panOrigin = e.GetPosition(ScoreScrollViewer);
+            _panStartH = ScoreScrollViewer.HorizontalOffset;
+            _panStartV = ScoreScrollViewer.VerticalOffset;
+            ScoreScrollViewer.Cursor = Cursors.SizeAll;
+            ScoreScrollViewer.CaptureMouse();
+            if (isMiddle) e.Handled = true;
+        }
+    }
+
+    private void ScoreScrollViewer_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_isPanning || ScoreScrollViewer is null) return;
+        if (e.LeftButton != MouseButtonState.Pressed && e.MiddleButton != MouseButtonState.Pressed)
+        {
+            EndViewportPan();
+            return;
+        }
+        var cur = e.GetPosition(ScoreScrollViewer);
+        var dx = cur.X - _panOrigin.X;
+        var dy = cur.Y - _panOrigin.Y;
+        ScoreScrollViewer.ScrollToHorizontalOffset(_panStartH - dx);
+        ScoreScrollViewer.ScrollToVerticalOffset(_panStartV - dy);
+    }
+
+    private void ScoreScrollViewer_PreviewMouseUp(object sender, MouseButtonEventArgs e) => EndViewportPan();
+
+    private void ScoreScrollViewer_LostMouseCapture(object sender, MouseEventArgs e) => EndViewportPan();
+
+    private void EndViewportPan()
+    {
+        if (!_isPanning || ScoreScrollViewer is null) return;
+        _isPanning = false;
+        if (ScoreScrollViewer.IsMouseCaptured)
+            ScoreScrollViewer.ReleaseMouseCapture();
+        ScoreScrollViewer.Cursor = Cursors.Arrow;
+    }
+
+    private static bool IsInsideScrollBar(DependencyObject? source)
+    {
+        while (source is not null)
+        {
+            if (source is ScrollBar) return true;
+            source = VisualTreeHelper.GetParent(source);
+        }
+        return false;
     }
 
     private string? PromptLyrics(string title, string label, string initial = "", double height = 360) =>
@@ -1182,8 +1487,16 @@ public partial class MainWindow : Window
     {
         if (LibraryDrawer is null || LibraryColumn is null || LibraryToggle is null) return;
         var open = LibraryToggle.IsChecked == true;
+        if (!open && LibraryColumn.ActualWidth > 100)
+            _savedLibraryWidth = Math.Clamp(LibraryColumn.ActualWidth, 180, 420);
+
         LibraryDrawer.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        LibraryColumn.Width = open ? new GridLength(252) : new GridLength(0);
+        LibraryColumn.MinWidth = open ? 170 : 0;
+        LibraryColumn.Width = open ? new GridLength(_savedLibraryWidth) : new GridLength(0);
+        if (SplitterColumn is not null)
+            SplitterColumn.Width = open ? new GridLength(5) : new GridLength(0);
+        if (WorkspaceSplitter is not null)
+            WorkspaceSplitter.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
 
         LibraryToggle.Background = open
             ? new SolidColorBrush(Color.FromRgb(234, 243, 237))
@@ -1353,6 +1666,7 @@ public partial class MainWindow : Window
             ChordDisplayMode = _selectedSong.ChordDisplayMode,
             ColumnMode = _selectedSong.ColumnMode,
             ShowChordGuide = _selectedSong.ShowChordGuide,
+            ShowTabSections = _selectedSong.ShowTabSections,
             UpdatedAt = DateTime.Now,
             Lines = new System.Collections.ObjectModel.ObservableCollection<LyricLine>(
                 _selectedSong.Lines.Select(line => new LyricLine
@@ -1361,10 +1675,13 @@ public partial class MainWindow : Window
                     Chords = line.Chords.Select(c => new ChordPlacement
                     {
                         Position = c.Position,
+                        BeforeChar = c.BeforeChar,
                         Name = c.Name,
                         ShapeId = c.ShapeId
                     }).ToList()
-                }))
+                })),
+            TabSections = new System.Collections.ObjectModel.ObservableCollection<TabSection>(
+                _selectedSong.TabSections.Select(t => t.Clone()))
         };
 
         _library.Songs.Add(clone);
@@ -1896,9 +2213,33 @@ public partial class MainWindow : Window
         Focus();
     }
 
+    private void MinimizeWindow_Click(object sender, RoutedEventArgs e) =>
+        WindowState = WindowState.Minimized;
+
+    private void ToggleMaximize_Click(object sender, RoutedEventArgs e) =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+    private void ExitWindow_Click(object sender, RoutedEventArgs e) =>
+        ExitApplication();
+
+    private void UpdateMaximizeVisual()
+    {
+        var isMaximized = WindowState == WindowState.Maximized;
+        if (MaximizeIconPath is not null)
+        {
+            MaximizeIconPath.Data = Geometry.Parse(isMaximized
+                ? "M 0,3 L 7,3 L 7,10 L 0,10 Z M 3,3 L 3,0 L 10,0 L 10,7 L 7,7"
+                : "M 0,0 L 10,0 L 10,10 L 0,10 Z");
+        }
+        if (MaximizeButton is not null)
+            MaximizeButton.ToolTip = isMaximized ? "还原窗口" : "全屏 / 最大化";
+        if (WindowOuterBorder is not null)
+            WindowOuterBorder.BorderThickness = isMaximized ? new Thickness(0) : new Thickness(1);
+        UpdateViewportScale();
+    }
+
     private void ExitApplication()
     {
-        _isExplicitExit = true;
         _trayService?.Dispose();
         _trayService = null;
         Application.Current.Shutdown();
@@ -1906,14 +2247,8 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        if (!_isExplicitExit)
-        {
-            e.Cancel = true;
-            Hide();
-            _trayService?.ShowMinimizedTipOnce();
-            return;
-        }
-
+        _trayService?.Dispose();
+        _trayService = null;
         base.OnClosing(e);
     }
 
@@ -1923,6 +2258,69 @@ public partial class MainWindow : Window
         _trayService = null;
         base.OnClosed(e);
     }
+
+    private static IntPtr WindowProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int WM_GETMINMAXINFO = 0x0024;
+        if (msg == WM_GETMINMAXINFO)
+        {
+            WmGetMinMaxInfo(hwnd, lParam);
+            handled = true;
+        }
+        return IntPtr.Zero;
+    }
+
+    private static void WmGetMinMaxInfo(IntPtr hwnd, IntPtr lParam)
+    {
+        var mmi = Marshal.PtrToStructure<MINMAXINFO>(lParam);
+        const uint MONITOR_DEFAULTTONEAREST = 0x00000002;
+        var monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        if (monitor != IntPtr.Zero)
+        {
+            var monitorInfo = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+            if (GetMonitorInfo(monitor, ref monitorInfo))
+            {
+                var rcWorkArea = monitorInfo.rcWork;
+                var rcMonitorArea = monitorInfo.rcMonitor;
+                mmi.ptMaxPosition.x = Math.Abs(rcWorkArea.left - rcMonitorArea.left);
+                mmi.ptMaxPosition.y = Math.Abs(rcWorkArea.top - rcMonitorArea.top);
+                mmi.ptMaxSize.x = Math.Abs(rcWorkArea.right - rcWorkArea.left);
+                mmi.ptMaxSize.y = Math.Abs(rcWorkArea.bottom - rcWorkArea.top);
+            }
+        }
+        Marshal.StructureToPtr(mmi, lParam, true);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT { public int x; public int y; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MINMAXINFO
+    {
+        public POINT ptReserved;
+        public POINT ptMaxSize;
+        public POINT ptMaxPosition;
+        public POINT ptMinTrackSize;
+        public POINT ptMaxTrackSize;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT { public int left; public int top; public int right; public int bottom; }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    private struct MONITORINFO
+    {
+        public int cbSize;
+        public RECT rcMonitor;
+        public RECT rcWork;
+        public int dwFlags;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
 
     private static void OpenExternalUrl(string url)
     {
