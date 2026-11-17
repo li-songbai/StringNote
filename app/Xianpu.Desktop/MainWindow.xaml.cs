@@ -286,6 +286,7 @@ public partial class MainWindow : Window
         {
             var isSelected = ScoreSurface?.ContinuousPaintMode == true &&
                              string.Equals(activeBrush, chordName, StringComparison.OrdinalIgnoreCase);
+            var isCustom = ChordCatalog.IsCustomChordInKey(key, chordName);
 
             var btn = new Button
             {
@@ -296,12 +297,110 @@ public partial class MainWindow : Window
                 Foreground = isSelected ? Brushes.White : new SolidColorBrush(Color.FromRgb(36, 85, 56)),
                 BorderBrush = isSelected ? new SolidColorBrush(Color.FromRgb(47, 107, 72)) : new SolidColorBrush(Color.FromRgb(203, 213, 225)),
                 ToolTip = ScoreSurface?.ContinuousPaintMode == true
-                    ? $"选中 {chordName} 后，可连续点击歌词字位放置"
-                    : $"将 {chordName} 填入当前光标字位（或点击后再点歌词字位）"
+                    ? $"选中 {chordName} 后，可连续点击歌词字位放置（右键可自定义指法）"
+                    : $"将 {chordName} 填入当前光标字位（右键可自定义指法{(isCustom ? "或移除" : "")}）"
             };
+
+            var menu = new ContextMenu();
+            var editShapeItem = new MenuItem { Header = $"自定义「{chordName}」左手按法..." };
+            editShapeItem.Click += (_, _) => EditCustomChordShape(key, chordName);
+            menu.Items.Add(editShapeItem);
+            if (isCustom)
+            {
+                var removeItem = new MenuItem { Header = $"从 {ChordCatalog.NormalizeKeyBucket(key)} 调移除「{chordName}」" };
+                removeItem.Click += (_, _) => RemoveCustomChordFromKey(key, chordName);
+                menu.Items.Add(removeItem);
+            }
+            btn.ContextMenu = menu;
+
             btn.Click += QuickChordChip_Click;
             QuickChordPanel.Children.Add(btn);
         }
+
+        var addBtn = new Button
+        {
+            Content = "+ 加和弦",
+            Style = (Style)FindResource("ChordChipButton"),
+            Background = new SolidColorBrush(Color.FromRgb(234, 243, 237)),
+            Foreground = new SolidColorBrush(Color.FromRgb(36, 85, 56)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(148, 191, 164)),
+            ToolTip = $"在 {ChordCatalog.NormalizeKeyBucket(key)} 调下新增左手和弦（支持自定义名称与指法图）"
+        };
+        addBtn.Click += (_, _) => AddCustomChordForKey(key);
+        QuickChordPanel.Children.Add(addBtn);
+    }
+
+    private void AddCustomChordForKey(string key, ChordAnchor? applyToPopoverAnchor = null)
+    {
+        var result = CustomChordDialog.Show(this, key, KeyNames);
+        if (!result.Saved || string.IsNullOrWhiteSpace(result.ChordName))
+            return;
+
+        ApplyCustomChordResult(result);
+
+        if (applyToPopoverAnchor is { } anchor && ChordPopover.IsOpen)
+        {
+            ScoreSurface.SetChordAt(anchor, result.ChordName);
+            ChordPopover.IsOpen = false;
+            SetStatus($"已在 {result.TargetKey} 调新增左手和弦「{result.ChordName}」并填入当前字位。");
+            ScoreSurface.Focus();
+        }
+        else
+        {
+            SetStatus($"已在 {result.TargetKey} 调新增左手和弦「{result.ChordName}」。");
+        }
+    }
+
+    private void EditCustomChordShape(string key, string chordName)
+    {
+        var result = CustomChordDialog.Show(this, key, KeyNames, chordName, lockChordName: true);
+        if (!result.Saved || string.IsNullOrWhiteSpace(result.ChordName))
+            return;
+
+        ApplyCustomChordResult(result, addToKeyPalette: false);
+        SetStatus($"已更新和弦「{result.ChordName}」的左手按法。");
+    }
+
+    private void ApplyCustomChordResult(CustomChordDialogResult result, bool addToKeyPalette = true)
+    {
+        if (addToKeyPalette)
+        {
+            var bucket = ChordCatalog.NormalizeKeyBucket(result.TargetKey);
+            if (!_library.CustomChordsByKey.TryGetValue(bucket, out var list))
+            {
+                list = [];
+                _library.CustomChordsByKey[bucket] = list;
+            }
+            if (!list.Contains(result.ChordName, StringComparer.OrdinalIgnoreCase))
+                list.Add(result.ChordName);
+        }
+
+        if (result.CustomShape is not null)
+        {
+            _library.CustomChordShapes.RemoveAll(s => string.Equals(s.Name, result.ChordName, StringComparison.OrdinalIgnoreCase));
+            _library.CustomChordShapes.Add(result.CustomShape);
+        }
+
+        ChordCatalog.LoadCustomData(_library.CustomChordsByKey, _library.CustomChordShapes);
+        SaveLibraryQuietly();
+        RefreshQuickChordBar();
+        ScoreSurface.Rebuild();
+    }
+
+    private void RemoveCustomChordFromKey(string key, string chordName)
+    {
+        var bucket = ChordCatalog.NormalizeKeyBucket(key);
+        if (_library.CustomChordsByKey.TryGetValue(bucket, out var list))
+        {
+            list.RemoveAll(c => string.Equals(c, chordName, StringComparison.OrdinalIgnoreCase));
+            if (list.Count == 0)
+                _library.CustomChordsByKey.Remove(bucket);
+        }
+
+        ChordCatalog.LoadCustomData(_library.CustomChordsByKey, _library.CustomChordShapes);
+        SaveLibraryQuietly();
+        RefreshQuickChordBar();
+        SetStatus($"已从 {bucket} 调移除自定义和弦「{chordName}」。");
     }
 
     private void QuickChordChip_Click(object sender, RoutedEventArgs e)
@@ -448,6 +547,21 @@ public partial class MainWindow : Window
             chip.Click += PopoverChordChip_Click;
             PopoverChordWrap.Children.Add(chip);
         }
+
+        var addPopoverChordBtn = new Button
+        {
+            Content = "+ 加和弦",
+            Padding = new Thickness(8, 3, 8, 3),
+            Margin = new Thickness(0, 0, 4, 4),
+            FontSize = 12,
+            FontWeight = FontWeights.SemiBold,
+            Background = new SolidColorBrush(Color.FromRgb(234, 243, 237)),
+            Foreground = new SolidColorBrush(Color.FromRgb(36, 85, 56)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(148, 191, 164)),
+            ToolTip = $"在 {ChordCatalog.NormalizeKeyBucket(key)} 调下新增左手和弦并填入"
+        };
+        addPopoverChordBtn.Click += (_, _) => AddCustomChordForKey(key, anchor);
+        PopoverChordWrap.Children.Add(addPopoverChordBtn);
 
         InlineChordBox.Text = initialText;
         Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>

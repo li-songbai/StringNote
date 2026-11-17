@@ -8,6 +8,17 @@ public sealed class LibraryData
 {
     public ObservableCollection<string> Categories { get; set; } = new() { "民谣", "练习" };
     public ObservableCollection<SongModel> Songs { get; set; } = [];
+    public Dictionary<string, List<string>> CustomChordsByKey { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public List<CustomChordDefinition> CustomChordShapes { get; set; } = [];
+}
+
+public sealed class CustomChordDefinition
+{
+    public string Name { get; set; } = "";
+    public int BaseFret { get; set; } = 1;
+    public int?[] Frets { get; set; } = new int?[6];
+    public int[] Fingers { get; set; } = new int[6];
+    public string Label { get; set; } = "自定义和弦";
 }
 
 public sealed class SongModel : INotifyPropertyChanged

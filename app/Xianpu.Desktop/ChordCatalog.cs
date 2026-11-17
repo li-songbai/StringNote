@@ -16,13 +16,104 @@ public static class ChordCatalog
         .GroupBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
         .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
 
+    private static readonly Dictionary<string, List<string>> CustomChordsByKey = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, ChordShape> CustomByName = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, ChordShape> CustomById = new(StringComparer.OrdinalIgnoreCase);
+
     public static IReadOnlyList<ChordShape> All => Shapes;
-    public static ChordShape? ByShapeId(string? id) => id is not null && ById.TryGetValue(id, out var shape) ? shape : null;
+
+    public static ChordShape? ByShapeId(string? id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return null;
+        if (CustomById.TryGetValue(id, out var custom)) return custom;
+        return ById.TryGetValue(id, out var shape) ? shape : null;
+    }
+
     public static ChordShape? ByName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return null;
         var normalized = NormalizeChordName(name);
+        if (CustomByName.TryGetValue(normalized, out var custom)) return custom;
         return FirstByName.TryGetValue(normalized, out var shape) ? shape : null;
+    }
+
+    public static ChordShape? BuiltInByName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        var normalized = NormalizeChordName(name);
+        return FirstByName.TryGetValue(normalized, out var shape) ? shape : null;
+    }
+
+    public static string NormalizeKeyBucket(string? key)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return "C";
+        var parsed = ChordTranspose.ReadKey(key);
+        if (parsed is null) return key.Trim();
+        var cleaned = Regex.Replace(key.Trim().Replace('♯', '#').Replace('♭', 'b'), @"(大调|小调|调)$", "", RegexOptions.CultureInvariant).Trim();
+        var match = Regex.Match(cleaned, @"^([A-Ga-g])([#b]?)(m?)$");
+        if (!match.Success) return key.Trim();
+        return char.ToUpperInvariant(match.Groups[1].Value[0]) + match.Groups[2].Value + match.Groups[3].Value;
+    }
+
+    public static void LoadCustomData(
+        IDictionary<string, List<string>>? chordsByKey,
+        IEnumerable<CustomChordDefinition>? customShapes)
+    {
+        CustomChordsByKey.Clear();
+        if (chordsByKey is not null)
+        {
+            foreach (var (rawKey, list) in chordsByKey)
+            {
+                if (list is null) continue;
+                var bucket = NormalizeKeyBucket(rawKey);
+                if (!CustomChordsByKey.TryGetValue(bucket, out var target))
+                {
+                    target = [];
+                    CustomChordsByKey[bucket] = target;
+                }
+                foreach (var item in list)
+                {
+                    var normalized = NormalizeChordName(item);
+                    if (!string.IsNullOrWhiteSpace(normalized) &&
+                        !target.Contains(normalized, StringComparer.OrdinalIgnoreCase))
+                    {
+                        target.Add(normalized);
+                    }
+                }
+            }
+        }
+
+        CustomByName.Clear();
+        CustomById.Clear();
+        if (customShapes is not null)
+        {
+            foreach (var def in customShapes)
+            {
+                var normalized = NormalizeChordName(def.Name);
+                if (string.IsNullOrWhiteSpace(normalized)) continue;
+                var frets = new int?[6];
+                var fingers = new int[6];
+                for (var i = 0; i < 6; i++)
+                {
+                    frets[i] = def.Frets is not null && i < def.Frets.Length ? def.Frets[i] : null;
+                    fingers[i] = def.Fingers is not null && i < def.Fingers.Length ? Math.Clamp(def.Fingers[i], 0, 4) : 0;
+                }
+                var id = $"custom-{normalized}";
+                var shape = new ChordShape
+                {
+                    Id = id,
+                    Name = normalized,
+                    Type = "custom",
+                    Frets = frets,
+                    Fingers = fingers,
+                    BaseFret = Math.Clamp(def.BaseFret <= 0 ? 1 : def.BaseFret, 1, 15),
+                    Barre = null,
+                    Label = string.IsNullOrWhiteSpace(def.Label) ? "自定义和弦" : def.Label.Trim()
+                };
+                CustomByName[normalized] = shape;
+                CustomById[id] = shape;
+            }
+        }
     }
 
     public static string NormalizeChordName(string? raw)
@@ -61,24 +152,52 @@ public static class ChordCatalog
         return quality;
     }
 
+    public static bool IsCustomChordInKey(string? key, string chordName)
+    {
+        var bucket = NormalizeKeyBucket(key);
+        var normalized = NormalizeChordName(chordName);
+        return CustomChordsByKey.TryGetValue(bucket, out var list) &&
+               list.Contains(normalized, StringComparer.OrdinalIgnoreCase);
+    }
+
     public static IReadOnlyList<string> GetCommonChordsForKey(string? key)
     {
         var parsed = ChordTranspose.ReadKey(key);
-        if (parsed is null)
-            return CommonTemplate;
-
-        var shift = parsed.Value.Minor ? (parsed.Value.Pitch + 3) % 12 : parsed.Value.Pitch;
-        var flats = ChordTranspose.PreferFlats(key);
-        var result = new List<string>(CommonTemplate.Length);
+        var result = new List<string>(CommonTemplate.Length + 4);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var item in CommonTemplate)
+        if (parsed is null)
         {
-            var shifted = ChordTranspose.Shift(item, shift, flats) ?? item;
-            var normalized = NormalizeChordName(shifted);
-            if (seen.Add(normalized))
-                result.Add(normalized);
+            foreach (var item in CommonTemplate)
+            {
+                if (seen.Add(item))
+                    result.Add(item);
+            }
         }
+        else
+        {
+            var shift = parsed.Value.Minor ? (parsed.Value.Pitch + 3) % 12 : parsed.Value.Pitch;
+            var flats = ChordTranspose.PreferFlats(key);
+            foreach (var item in CommonTemplate)
+            {
+                var shifted = ChordTranspose.Shift(item, shift, flats) ?? item;
+                var normalized = NormalizeChordName(shifted);
+                if (seen.Add(normalized))
+                    result.Add(normalized);
+            }
+        }
+
+        var bucket = NormalizeKeyBucket(key);
+        if (CustomChordsByKey.TryGetValue(bucket, out var customList))
+        {
+            foreach (var customChord in customList)
+            {
+                var normalized = NormalizeChordName(customChord);
+                if (!string.IsNullOrWhiteSpace(normalized) && seen.Add(normalized))
+                    result.Add(normalized);
+            }
+        }
+
         return result;
     }
 

@@ -28,10 +28,20 @@ public sealed class LibraryStore
     {
         try
         {
-            if (!File.Exists(LibraryPath)) return new LibraryData();
+            if (!File.Exists(LibraryPath))
+            {
+                var empty = new LibraryData();
+                ChordCatalog.LoadCustomData(empty.CustomChordsByKey, empty.CustomChordShapes);
+                return empty;
+            }
             var loaded = JsonSerializer.Deserialize<LibraryData>(File.ReadAllText(LibraryPath), JsonOptions) ?? new LibraryData();
             loaded.Categories ??= [];
             loaded.Songs ??= [];
+            loaded.CustomChordsByKey = new Dictionary<string, List<string>>(
+                loaded.CustomChordsByKey ?? new Dictionary<string, List<string>>(),
+                StringComparer.OrdinalIgnoreCase);
+            loaded.CustomChordShapes ??= [];
+            ChordCatalog.LoadCustomData(loaded.CustomChordsByKey, loaded.CustomChordShapes);
             foreach (var song in loaded.Songs)
                 NormalizeSong(song);
             return loaded;
