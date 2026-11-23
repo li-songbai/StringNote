@@ -31,6 +31,9 @@ public static partial class LrcImporter
     [GeneratedRegex(@"(?:变调夹|Capo)\s*[:：=]?\s*([0-9一二三四五六七八九十]+\s*品|不夹|免夹|无)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex CapoRegex();
 
+    [GeneratedRegex(@"^(?:主歌|副歌|预副歌|导歌|桥段|尾声|尾奏|前奏|引子|间奏|过渡|段落|重复|Part|Verse|Chorus|Pre-?Chorus|Bridge|Outro|Intro|Hook|Refrain|[A-Za-z]段)(?:[\s\-_#]*[0-9A-Za-z一二三四五六七八九十]+)?(?:\s*[（(].*?[)）])?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex SectionNameRegex();
+
     public static string ReadFile(string path)
     {
         var bytes = File.ReadAllBytes(path);
@@ -56,18 +59,32 @@ public static partial class LrcImporter
 
     public static SongModel ImportText(string content, string? defaultTitle = null)
     {
-        var timedLines = new List<(double Time, int Order, string Text)>();
-        var plainLines = new List<string>();
+        var timedLines = new List<(double Time, int Order, string Text, string? ExplicitPartTitle)>();
+        var plainLines = new List<(string Text, string? ExplicitPartTitle, bool BlankBefore)>();
         var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var originalKey = "";
         var selectedKey = "";
         var capo = "";
         var order = 0;
+        string? pendingPartTitle = null;
+        var sawBlankLine = false;
 
         foreach (var rawLine in (content ?? "").TrimStart('\uFEFF').Split(["\r\n", "\n", "\r"], StringSplitOptions.None))
         {
             var trimmed = rawLine.Trim();
-            if (trimmed.Length == 0) continue;
+            if (trimmed.Length == 0)
+            {
+                if (plainLines.Count > 0 || timedLines.Count > 0)
+                    sawBlankLine = true;
+                continue;
+            }
+
+            if (TryParseSectionHeader(trimmed, out var headerTitle))
+            {
+                pendingPartTitle = headerTitle;
+                sawBlankLine = false;
+                continue;
+            }
 
             var tag = TagRegex().Match(trimmed);
             if (tag.Success)
@@ -83,20 +100,31 @@ public static partial class LrcImporter
                 var lyric = CleanInlineTags(remainder);
                 if (lyric.Length == 0) continue;
 
+                if (TryParseSectionHeader(lyric, out var inlineHeader))
+                {
+                    pendingPartTitle = inlineHeader;
+                    sawBlankLine = false;
+                    continue;
+                }
+
                 var extractedMeta = TryExtractMusicalMeta(lyric, ref originalKey, ref selectedKey, ref capo);
                 if (CreditLineRegex().IsMatch(lyric) || IsPureMusicalMetaLine(lyric, extractedMeta))
                     continue;
 
                 var matches = TimestampRegex().Matches(leadingMatch.Value);
-                foreach (Match match in matches)
+                for (var matchIndex = 0; matchIndex < matches.Count; matchIndex++)
                 {
+                    var match = matches[matchIndex];
                     var fraction = match.Groups[3].Success ? match.Groups[3].Value : "0";
                     var fractionalSeconds = double.Parse("0." + fraction, CultureInfo.InvariantCulture);
                     var seconds = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture) * 60
                                   + int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture)
                                   + fractionalSeconds;
-                    timedLines.Add((seconds, order++, lyric));
+                    var partTitleForMatch = matchIndex == 0 ? pendingPartTitle : null;
+                    timedLines.Add((seconds, order++, lyric, partTitleForMatch));
                 }
+                pendingPartTitle = null;
+                sawBlankLine = false;
             }
             else
             {
@@ -108,7 +136,9 @@ public static partial class LrcImporter
                 if (CreditLineRegex().IsMatch(lyric) || IsPureMusicalMetaLine(lyric, extractedMeta))
                     continue;
 
-                plainLines.Add(lyric);
+                plainLines.Add((lyric, pendingPartTitle, sawBlankLine));
+                pendingPartTitle = null;
+                sawBlankLine = false;
             }
         }
 
@@ -130,16 +160,117 @@ public static partial class LrcImporter
 
         if (timedLines.Count > 0)
         {
-            foreach (var item in timedLines.OrderBy(x => x.Time).ThenBy(x => x.Order))
-                song.Lines.Add(new LyricLine { Text = item.Text });
+            var sorted = timedLines.OrderBy(x => x.Time).ThenBy(x => x.Order).ToList();
+            var boundaryIndices = new HashSet<int>();
+
+            for (var i = 0; i < sorted.Count; i++)
+            {
+                if (!string.IsNullOrWhiteSpace(sorted[i].ExplicitPartTitle))
+                    boundaryIndices.Add(i);
+            }
+
+            if (sorted.Count >= 6)
+            {
+                var positiveGaps = new List<double>();
+                for (var i = 1; i < sorted.Count; i++)
+                {
+                    var dt = sorted[i].Time - sorted[i - 1].Time;
+                    if (dt > 0.1) positiveGaps.Add(dt);
+                }
+
+                if (positiveGaps.Count >= 3)
+                {
+                    positiveGaps.Sort();
+                    var medianDt = positiveGaps[positiveGaps.Count / 2];
+                    var gapThreshold = Math.Max(medianDt * 2.2, 8.0);
+                    for (var i = 1; i < sorted.Count; i++)
+                    {
+                        var dt = sorted[i].Time - sorted[i - 1].Time;
+                        if (dt >= gapThreshold)
+                            boundaryIndices.Add(i);
+                    }
+                }
+            }
+
+            var hasSegmentation = boundaryIndices.Any(idx => idx > 0) || boundaryIndices.Contains(0);
+            var partNumber = 0;
+            for (var i = 0; i < sorted.Count; i++)
+            {
+                var explicitTitle = sorted[i].ExplicitPartTitle;
+                var isStart = i == 0 ? hasSegmentation : boundaryIndices.Contains(i);
+                var partTitle = "";
+                if (isStart)
+                {
+                    partNumber++;
+                    partTitle = !string.IsNullOrWhiteSpace(explicitTitle) ? explicitTitle : $"段落 {partNumber}";
+                }
+                song.Lines.Add(new LyricLine { Text = sorted[i].Text, PartTitle = partTitle });
+            }
         }
         else
         {
-            foreach (var text in plainLines)
-                song.Lines.Add(new LyricLine { Text = text });
+            var hasSegmentation = plainLines.Where((_, idx) => idx > 0).Any(x => !string.IsNullOrWhiteSpace(x.ExplicitPartTitle) || x.BlankBefore)
+                                  || !string.IsNullOrWhiteSpace(plainLines[0].ExplicitPartTitle);
+            var partNumber = 0;
+            for (var i = 0; i < plainLines.Count; i++)
+            {
+                var item = plainLines[i];
+                var isStart = i == 0
+                    ? hasSegmentation
+                    : (!string.IsNullOrWhiteSpace(item.ExplicitPartTitle) || item.BlankBefore);
+                var partTitle = "";
+                if (isStart)
+                {
+                    partNumber++;
+                    partTitle = !string.IsNullOrWhiteSpace(item.ExplicitPartTitle) ? item.ExplicitPartTitle : $"段落 {partNumber}";
+                }
+                song.Lines.Add(new LyricLine { Text = item.Text, PartTitle = partTitle });
+            }
         }
 
         return song;
+    }
+
+    private static bool TryParseSectionHeader(string trimmed, out string partTitle)
+    {
+        partTitle = "";
+        if (string.IsNullOrWhiteSpace(trimmed)) return false;
+
+        string candidate;
+        var allowCustomTitle = false;
+        if (trimmed.StartsWith('[') && trimmed.EndsWith(']') && trimmed.Length > 2)
+        {
+            candidate = trimmed[1..^1].Trim();
+        }
+        else if (trimmed.StartsWith('【') && trimmed.EndsWith('】') && trimmed.Length > 2)
+        {
+            candidate = trimmed[1..^1].Trim();
+        }
+        else if (trimmed.StartsWith("---", StringComparison.Ordinal) && trimmed.EndsWith("---", StringComparison.Ordinal) && trimmed.Length > 6)
+        {
+            candidate = trimmed.Trim('-', ' ', '\t');
+            allowCustomTitle = true;
+        }
+        else if (trimmed.EndsWith(':') || trimmed.EndsWith('：'))
+        {
+            candidate = trimmed[..^1].Trim();
+        }
+        else
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(candidate))
+            return false;
+
+        if (!allowCustomTitle && !SectionNameRegex().IsMatch(candidate))
+            return false;
+
+        if (allowCustomTitle && candidate.Length > 32)
+            return false;
+
+        partTitle = candidate;
+        return true;
     }
 
     private static string CleanInlineTags(string input)

@@ -248,6 +248,7 @@
                     <WrapPanel VerticalAlignment="Center">
                         <Button Content="导入 LRC" Style="{StaticResource AccentOutlineButton}" Click="ImportLrc_Click" Margin="0,2,5,2" ToolTip="导入 .lrc 或 .txt 歌词文件（也支持直接拖入窗口）" />
                         <Button Content="编辑歌词" Click="EditAllLyrics_Click" Margin="0,2,5,2" ToolTip="粘贴或批量修改整首歌词（保留已有和弦）" />
+                        <Button x:Name="PartArrangeButton" Content="段落编排" Click="PartArrange_Click" Margin="0,2,5,2" ToolTip="拆分主歌/副歌段落、合并多遍叠行歌词或折叠重复段" />
                         <Button Content="清空新谱" Click="NewSong_Click" Margin="0,2,8,2" ToolTip="新建空白曲谱" />
                         <Border Width="1" Height="20" Background="#E2E8F0" Margin="0,2,8,2" />
                         <Button Content="打开" Click="OpenProject_Click" Margin="0,2,5,2" ToolTip="打开 .xianpu.json 曲谱文件" />

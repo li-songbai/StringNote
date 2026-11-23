@@ -20,7 +20,13 @@ public sealed class ScoreSurface : FrameworkElement
     private const double LyricFontSize = 19;
     private const double ChordFontSize = 16.5;
     private const double LyricLineHeight = 28;
+    private const double AltLyricLineHeight = 24;
     private const double RowBottomGap = 6;
+    private const double PartHeaderHeight = 26;
+    private const double PartHeaderTopGap = 10;
+    private const double VerseBadgeWidth = 22;
+    private const double StackedHalfCellWidth = 10.5;
+    private const double StackedFullCellWidth = 21.0;
     private const double NameMarkerHeight = 24;
     private const double DiagramMarkerHeight = 68;
     private const double DiagramMarkerScale = 0.62;
@@ -28,11 +34,17 @@ public sealed class ScoreSurface : FrameworkElement
     private static readonly Typeface LyricTypeface = new(new FontFamily("Microsoft YaHei"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
     private static readonly Typeface ChordTypeface = new(new FontFamily("Microsoft YaHei"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal);
     private static readonly Brush Ink = Freeze(new SolidColorBrush(Color.FromRgb(42, 47, 41)));
+    private static readonly Brush AltLyricInk = Freeze(new SolidColorBrush(Color.FromRgb(63, 71, 64)));
     private static readonly Brush Green = Freeze(new SolidColorBrush(Color.FromRgb(49, 92, 57)));
     private static readonly Brush SelectedChordInk = Freeze(new SolidColorBrush(Color.FromRgb(30, 68, 39)));
     private static readonly Brush Quiet = Freeze(new SolidColorBrush(Color.FromRgb(126, 134, 122)));
     private static readonly Brush Rule = Freeze(new SolidColorBrush(Color.FromRgb(228, 232, 224)));
     private static readonly Brush ColumnRule = Freeze(new SolidColorBrush(Color.FromRgb(236, 239, 233)));
+    private static readonly Brush PartBadgeFill = Freeze(new SolidColorBrush(Color.FromRgb(234, 243, 237)));
+    private static readonly Brush PartBadgeBorder = Freeze(new SolidColorBrush(Color.FromRgb(199, 223, 206)));
+    private static readonly Brush RepeatBadgeFill = Freeze(new SolidColorBrush(Color.FromRgb(47, 107, 72)));
+    private static readonly Brush RefLineFill = Freeze(new SolidColorBrush(Color.FromRgb(244, 247, 244)));
+    private static readonly Brush RefLineBorder = Freeze(new SolidColorBrush(Color.FromRgb(213, 226, 215)));
     private static readonly Brush HoverCharFill = Freeze(new SolidColorBrush(Color.FromArgb(46, 108, 158, 114)));
     private static readonly Brush HoverSlotFill = Freeze(new SolidColorBrush(Color.FromArgb(32, 108, 158, 114)));
     private static readonly Brush HoverSlotBorder = Freeze(new SolidColorBrush(Color.FromArgb(120, 96, 142, 102)));
@@ -41,6 +53,8 @@ public sealed class ScoreSurface : FrameworkElement
     private static readonly Brush SelectedChordFill = Freeze(new SolidColorBrush(Color.FromRgb(233, 243, 234)));
     private static readonly Brush SelectedChordBorder = Freeze(new SolidColorBrush(Color.FromRgb(94, 140, 100)));
     private static readonly Pen CharSlotTickPen = FreezePen(new Pen(Freeze(new SolidColorBrush(Color.FromArgb(75, 110, 140, 115))), 0.8));
+    private static readonly Pen PartRulePen = FreezePen(new Pen(Freeze(new SolidColorBrush(Color.FromRgb(229, 235, 227))), 1));
+    private static readonly Pen VerseBracketPen = FreezePen(new Pen(Freeze(new SolidColorBrush(Color.FromRgb(184, 206, 188))), 1.5));
 
     private readonly List<RowLayout> _rows = [];
     private readonly List<TabSectionLayout> _tabLayouts = [];
@@ -83,9 +97,11 @@ public sealed class ScoreSurface : FrameworkElement
     public event Action<TabSection>? TabSectionDuplicateRequested;
     public event Action<TabSection>? TabSectionDeleteRequested;
     public event Action<TabSectionKind, int>? TabSectionInsertRequested;
+    public event Action<int>? AddAltLyricRequested;
+    public event Action? PartArrangeRequested;
 
     public bool IsPointInteractive(Point point) =>
-        FindChord(point) is not null || GetAnchorAt(point) is not null || FindTabSection(point) is not null;
+        FindChord(point) is not null || GetAnchorAt(point) is not null || FindTabSection(point) is not null || FindReferenceRow(point) is not null;
 
     private static Brush Freeze(SolidColorBrush brush)
     {
@@ -213,17 +229,48 @@ public sealed class ScoreSurface : FrameworkElement
         {
             var line = Song.Lines[index];
             var col = _columnCount == 2 && index >= leftCount ? 1 : 0;
+            var hasPartHeader = !line.IsReferenceLine && (!string.IsNullOrWhiteSpace(line.PartTitle) || line.RepeatCount > 1);
+            var isStacked = !line.IsReferenceLine && line.HasStackedLyrics;
 
-            var chunks = Wrap(line.Text, columnWidth);
-            var height = 0d;
-            for (var i = 0; i < chunks.Count; i++)
+            var currentColTop = isHorizontalFlow
+                ? curY
+                : (col == 0 ? yLeft : yRight);
+            var headerTopGap = hasPartHeader && currentColTop > topY + 0.5 ? PartHeaderTopGap : 0d;
+            var headerReserve = hasPartHeader ? headerTopGap + PartHeaderHeight : 0d;
+
+            List<TextChunk> chunks;
+            var height = headerReserve;
+
+            if (line.IsReferenceLine)
             {
-                var chunkTop = height;
-                var lyricOffset = chunkTop + markerHeight;
-                chunks[i] = chunks[i] with { Top = chunkTop, LyricTop = lyricOffset };
-                height = lyricOffset + LyricLineHeight;
+                chunks = [new TextChunk(0, 0, line.Text.Length, line.Text, [], headerReserve, headerReserve)];
+                height += 34 + RowBottomGap;
             }
-            height += RowBottomGap;
+            else if (isStacked)
+            {
+                var availableWidth = Math.Max(120, columnWidth - VerseBadgeWidth);
+                chunks = WrapStacked(line, availableWidth);
+                for (var i = 0; i < chunks.Count; i++)
+                {
+                    var chunkTop = height;
+                    var lyricOffset = chunkTop + markerHeight;
+                    chunks[i] = chunks[i] with { Top = chunkTop, LyricTop = lyricOffset };
+                    height = lyricOffset + LyricLineHeight + line.AltLyrics.Count * AltLyricLineHeight;
+                }
+                height += RowBottomGap;
+            }
+            else
+            {
+                chunks = Wrap(line.Text, columnWidth);
+                for (var i = 0; i < chunks.Count; i++)
+                {
+                    var chunkTop = height;
+                    var lyricOffset = chunkTop + markerHeight;
+                    chunks[i] = chunks[i] with { Top = chunkTop, LyricTop = lyricOffset };
+                    height = lyricOffset + LyricLineHeight;
+                }
+                height += RowBottomGap;
+            }
 
             double rowLeft;
             double rowTop;
@@ -231,7 +278,8 @@ public sealed class ScoreSurface : FrameworkElement
 
             if (isHorizontalFlow)
             {
-                var isSingleShortLine = chunks.Count == 1 && !string.IsNullOrWhiteSpace(line.Text);
+                var isSingleShortLine = !hasPartHeader && !line.IsReferenceLine && !isStacked &&
+                                        chunks.Count == 1 && !string.IsNullOrWhiteSpace(line.Text);
                 var singleWidth = isSingleShortLine ? Measure(line.Text, LyricFontSize, LyricTypeface).Width : usableWidth;
 
                 if (phrasesInRow > 0 && isSingleShortLine && phrasesInRow < MaxPhrasesPerRow &&
@@ -252,6 +300,20 @@ public sealed class ScoreSurface : FrameworkElement
                         curX = _pageMarginCurrent;
                         phrasesInRow = 0;
                         rowMaxHeight = 0;
+                        if (hasPartHeader && curY > topY + 0.5 && headerTopGap == 0)
+                        {
+                            headerTopGap = PartHeaderTopGap;
+                            headerReserve = headerTopGap + PartHeaderHeight;
+                            for (var i = 0; i < chunks.Count; i++)
+                            {
+                                chunks[i] = chunks[i] with
+                                {
+                                    Top = chunks[i].Top + headerTopGap,
+                                    LyricTop = chunks[i].LyricTop + headerTopGap
+                                };
+                            }
+                            height += headerTopGap;
+                        }
                     }
 
                     rowLeft = _pageMarginCurrent;
@@ -279,8 +341,14 @@ public sealed class ScoreSurface : FrameworkElement
                 else yRight += height;
             }
 
-            var placements = BuildPlacements(index, line, chunks, rowLeft, rowTop);
-            _rows.Add(new RowLayout(index, col, line, rowLeft, rowWidth, rowTop, height, chunks, placements));
+            var contentLeft = isStacked ? rowLeft + VerseBadgeWidth : rowLeft;
+            var partHeaderTop = rowTop + headerTopGap;
+            var placements = line.IsReferenceLine
+                ? []
+                : BuildPlacements(index, line, chunks, contentLeft, rowTop);
+            _rows.Add(new RowLayout(
+                index, col, line, rowLeft, contentLeft, rowWidth, rowTop, height,
+                hasPartHeader, partHeaderTop, isStacked, chunks, placements));
 
             if (interludesByLine.TryGetValue(index, out var lineTabs))
             {
@@ -347,7 +415,7 @@ public sealed class ScoreSurface : FrameworkElement
         return chord.Name;
     }
 
-    private List<Placement> BuildPlacements(int lineIndex, LyricLine line, List<TextChunk> chunks, double rowLeft, double rowTop)
+    private List<Placement> BuildPlacements(int lineIndex, LyricLine line, List<TextChunk> chunks, double contentLeft, double rowTop)
     {
         var placements = new List<Placement>();
         var prevRightByChunk = new Dictionary<int, double>();
@@ -357,8 +425,8 @@ public sealed class ScoreSurface : FrameworkElement
             var position = Math.Clamp(chord.Position, 0, line.Text.Length);
             var chunkIndex = FindChunk(chunks, position);
             var chunk = chunks[chunkIndex];
-            var anchorX = rowLeft + Measure(line.Text[chunk.Start..position], LyricFontSize, LyricTypeface).Width;
-            var charWidth = Math.Max(16, MeasureElementAt(line.Text, position));
+            var anchorX = contentLeft + MeasurePrefixWidth(line, chunk.Start, position);
+            var charWidth = Math.Max(16, MeasureElementWidth(line, position));
             var targetChar = position < line.Text.Length ? StringInfo.GetNextTextElement(line.Text, position) : "";
             var charCenterX = anchorX + charWidth / 2;
             var drawX = chord.BeforeChar ? Math.Max(8, anchorX - 18) : anchorX;
@@ -377,7 +445,7 @@ public sealed class ScoreSurface : FrameworkElement
                 {
                     idealX = textWidth <= charWidth + 4 ? charCenterX - textWidth / 2 : anchorX;
                 }
-                var minX = chord.BeforeChar ? Math.Max(8, rowLeft - 30) : rowLeft;
+                var minX = chord.BeforeChar ? Math.Max(8, contentLeft - 30) : contentLeft;
                 drawX = Math.Max(minX, idealX);
                 if (prevRightByChunk.TryGetValue(chunkIndex, out var prevRight) && drawX < prevRight + 8)
                     drawX = prevRight + 8;
@@ -516,8 +584,8 @@ public sealed class ScoreSurface : FrameworkElement
         var chunkIndex = FindChunk(row.Chunks, pos);
         var chunk = row.Chunks[chunkIndex];
         var clampedPos = Math.Clamp(pos, chunk.Start, chunk.End);
-        var x = row.Left + Measure(row.Line.Text[chunk.Start..clampedPos], LyricFontSize, LyricTypeface).Width;
-        var charWidth = MeasureElementAt(row.Line.Text, clampedPos);
+        var x = row.ContentLeft + MeasurePrefixWidth(row.Line, chunk.Start, clampedPos);
+        var charWidth = MeasureElementWidth(row.Line, clampedPos);
         var y = row.Top + chunk.Top;
         var height = (chunk.LyricTop - chunk.Top) + LyricLineHeight;
         return new Rect(x, y, Math.Max(18, charWidth), height);
@@ -526,14 +594,27 @@ public sealed class ScoreSurface : FrameworkElement
     public bool MoveCaret(int deltaChars, int deltaLines = 0)
     {
         if (Song is null || Song.Lines.Count == 0) return false;
-        var current = _caret ?? new ChordAnchor(Math.Clamp(SelectedLineIndex ?? 0, 0, Song.Lines.Count - 1), 0);
+        var editableIndices = new List<int>();
+        for (var i = 0; i < Song.Lines.Count; i++)
+        {
+            if (!Song.Lines[i].IsReferenceLine)
+                editableIndices.Add(i);
+        }
+        if (editableIndices.Count == 0) return false;
+
+        var current = _caret ?? new ChordAnchor(Math.Clamp(SelectedLineIndex ?? editableIndices[0], 0, Song.Lines.Count - 1), 0);
         var lineIndex = Math.Clamp(current.LineIndex, 0, Song.Lines.Count - 1);
+        if (Song.Lines[lineIndex].IsReferenceLine)
+            lineIndex = editableIndices[0];
+
         var positions = GetElementPositions(Song.Lines[lineIndex].Text);
         var elemIdx = FindClosestElementIndex(positions, current.Position);
 
         if (deltaLines != 0)
         {
-            var targetLine = Math.Clamp(lineIndex + deltaLines, 0, Song.Lines.Count - 1);
+            var curEditablePos = editableIndices.IndexOf(lineIndex);
+            var targetEditablePos = Math.Clamp((curEditablePos >= 0 ? curEditablePos : 0) + deltaLines, 0, editableIndices.Count - 1);
+            var targetLine = editableIndices[targetEditablePos];
             var targetPositions = GetElementPositions(Song.Lines[targetLine].Text);
             var targetElemIdx = Math.Clamp(elemIdx, 0, targetPositions.Count - 1);
             lineIndex = targetLine;
@@ -543,17 +624,21 @@ public sealed class ScoreSurface : FrameworkElement
 
         if (deltaChars != 0)
         {
+            var curEditablePos = editableIndices.IndexOf(lineIndex);
+            if (curEditablePos < 0) curEditablePos = 0;
             var nextElemIdx = elemIdx + deltaChars;
-            while (nextElemIdx < 0 && lineIndex > 0)
+            while (nextElemIdx < 0 && curEditablePos > 0)
             {
-                lineIndex--;
+                curEditablePos--;
+                lineIndex = editableIndices[curEditablePos];
                 positions = GetElementPositions(Song.Lines[lineIndex].Text);
                 nextElemIdx += positions.Count;
             }
-            while (nextElemIdx >= positions.Count && lineIndex < Song.Lines.Count - 1)
+            while (nextElemIdx >= positions.Count && curEditablePos < editableIndices.Count - 1)
             {
                 nextElemIdx -= positions.Count;
-                lineIndex++;
+                curEditablePos++;
+                lineIndex = editableIndices[curEditablePos];
                 positions = GetElementPositions(Song.Lines[lineIndex].Text);
             }
             elemIdx = Math.Clamp(nextElemIdx, 0, positions.Count - 1);
@@ -697,17 +782,53 @@ public sealed class ScoreSurface : FrameworkElement
 
         foreach (var row in _rows)
         {
+            if (row.HasPartHeader)
+                DrawPartHeader(dc, row);
+
+            if (row.Line.IsReferenceLine)
+            {
+                DrawReferenceRow(dc, row);
+                continue;
+            }
+
             if (Song.ColumnMode == 0 && row.Left > _pageMarginCurrent + 1 && row.Chunks.Count > 0)
             {
                 var sepText = "·";
                 var sepWidth = Measure(sepText, LyricFontSize, LyricTypeface).Width;
                 DrawText(dc, sepText, row.Left - PhraseGap / 2 - sepWidth / 2, row.Top + row.Chunks[0].LyricTop, LyricFontSize, LyricTypeface, Quiet);
             }
-            foreach (var chunk in row.Chunks)
+
+            if (row.IsStacked)
             {
-                var baseline = row.Top + chunk.LyricTop;
-                DrawText(dc, chunk.Text, row.Left, baseline, LyricFontSize, LyricTypeface, Ink);
+                foreach (var chunk in row.Chunks)
+                {
+                    var baseTop = row.Top + chunk.LyricTop;
+                    var bracketTop = baseTop + 3;
+                    var bracketBottom = baseTop + LyricLineHeight + row.Line.AltLyrics.Count * AltLyricLineHeight - 4;
+                    dc.DrawLine(VerseBracketPen, new Point(row.Left + 2, bracketTop), new Point(row.Left + 2, bracketBottom));
+
+                    DrawText(dc, "1", row.Left + 6, baseTop + 5, 10.5, ChordTypeface, Green);
+                    DrawStackedTextElements(dc, chunk.Text, row.ContentLeft, baseTop, Ink);
+
+                    for (var altIdx = 0; altIdx < row.Line.AltLyrics.Count; altIdx++)
+                    {
+                        var altTop = baseTop + LyricLineHeight + altIdx * AltLyricLineHeight;
+                        DrawText(dc, (altIdx + 2).ToString(CultureInfo.InvariantCulture), row.Left + 6, altTop + 5, 10.5, LyricTypeface, Quiet);
+                        var altSlice = altIdx < chunk.AltSlices.Count ? chunk.AltSlices[altIdx] : "";
+                        if (!string.IsNullOrEmpty(altSlice))
+                            DrawStackedTextElements(dc, altSlice, row.ContentLeft, altTop, AltLyricInk);
+                    }
+                }
             }
+            else
+            {
+                foreach (var chunk in row.Chunks)
+                {
+                    var baseline = row.Top + chunk.LyricTop;
+                    DrawText(dc, chunk.Text, row.ContentLeft, baseline, LyricFontSize, LyricTypeface, Ink);
+                }
+            }
+
             foreach (var placement in row.Placements)
             {
                 var isSelected = !IsExporting && _selectedPlaced is { } hit &&
@@ -732,16 +853,76 @@ public sealed class ScoreSurface : FrameworkElement
         }
     }
 
+    private void DrawPartHeader(DrawingContext dc, RowLayout row)
+    {
+        var y = row.PartHeaderTop;
+        var x = row.Left;
+
+        if (!string.IsNullOrWhiteSpace(row.Line.PartTitle))
+        {
+            var titleFmt = ChordDiagramPainter.CreateText(row.Line.PartTitle, 11.5, ChordTypeface, Green, _pixelsPerDip);
+            var pillRect = new Rect(x, y + 2, titleFmt.Width + 16, 20);
+            dc.DrawRoundedRectangle(PartBadgeFill, new Pen(PartBadgeBorder, 1), pillRect, 5, 5);
+            dc.DrawText(titleFmt, new Point(x + 8, y + 4));
+            x = pillRect.Right + 6;
+        }
+
+        if (row.Line.RepeatCount > 1)
+        {
+            var repeatText = $"×{row.Line.RepeatCount}";
+            var repeatFmt = ChordDiagramPainter.CreateText(repeatText, 11, ChordTypeface, Brushes.White, _pixelsPerDip);
+            var repeatRect = new Rect(x, y + 3, repeatFmt.Width + 12, 18);
+            dc.DrawRoundedRectangle(RepeatBadgeFill, null, repeatRect, 9, 9);
+            dc.DrawText(repeatFmt, new Point(x + 6, y + 4));
+            x = repeatRect.Right + 8;
+        }
+
+        var ruleStart = x > row.Left ? x + 4 : row.Left;
+        var ruleEnd = row.Left + row.Width;
+        if (ruleEnd - ruleStart > 16)
+            dc.DrawLine(PartRulePen, new Point(ruleStart, y + 12), new Point(ruleEnd, y + 12));
+    }
+
+    private void DrawReferenceRow(DrawingContext dc, RowLayout row)
+    {
+        var text = string.IsNullOrWhiteSpace(row.Line.Text) ? "→ 反复段落" : row.Line.Text;
+        var fmt = ChordDiagramPainter.CreateText(text, 13.5, ChordTypeface, Green, _pixelsPerDip);
+        var pillWidth = Math.Min(row.Width, Math.Max(140, fmt.Width + 28));
+        var rect = new Rect(row.Left, row.Top + (row.HasPartHeader ? PartHeaderHeight : 0) + 4, pillWidth, 26);
+        dc.DrawRoundedRectangle(RefLineFill, new Pen(RefLineBorder, 1), rect, 6, 6);
+        dc.DrawText(fmt, new Point(rect.Left + 14, rect.Top + 4));
+    }
+
+    private void DrawStackedTextElements(DrawingContext dc, string text, double startX, double y, Brush brush)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+        var cellOffset = 0;
+        var enumerator = StringInfo.GetTextElementEnumerator(text);
+        while (enumerator.MoveNext())
+        {
+            var element = enumerator.GetTextElement();
+            var units = PartAnalyzer.GetHalfCellUnits(element);
+            if (!string.IsNullOrWhiteSpace(element))
+            {
+                var slotWidth = units * StackedHalfCellWidth;
+                var fmt = ChordDiagramPainter.CreateText(element, LyricFontSize, LyricTypeface, brush, _pixelsPerDip);
+                var drawX = startX + cellOffset * StackedHalfCellWidth + (slotWidth - fmt.Width) / 2;
+                dc.DrawText(fmt, new Point(drawX, y));
+            }
+            cellOffset += units;
+        }
+    }
+
     private void DrawAnchorHighlight(DrawingContext dc, ChordAnchor anchor, bool isCaret)
     {
         var row = _rows.FirstOrDefault(r => r.Index == anchor.LineIndex);
-        if (row is null) return;
+        if (row is null || row.Line.IsReferenceLine) return;
         var pos = Math.Clamp(anchor.Position, 0, row.Line.Text.Length);
         var chunkIndex = FindChunk(row.Chunks, pos);
         var chunk = row.Chunks[chunkIndex];
         var clampedPos = Math.Clamp(pos, chunk.Start, chunk.End);
-        var x = row.Left + Measure(row.Line.Text[chunk.Start..clampedPos], LyricFontSize, LyricTypeface).Width;
-        var charW = Math.Max(18, MeasureElementAt(row.Line.Text, clampedPos));
+        var x = row.ContentLeft + MeasurePrefixWidth(row.Line, chunk.Start, clampedPos);
+        var charW = Math.Max(18, MeasureElementWidth(row.Line, clampedPos));
         var lyricY = row.Top + chunk.LyricTop;
         var chordTopY = row.Top + chunk.Top;
         var markerHeight = chunk.LyricTop - chunk.Top;
@@ -763,11 +944,13 @@ public sealed class ScoreSurface : FrameworkElement
         }
 
         // Subtle character slot tick marks along the active chunk so character boundaries are clear during editing.
-        var tickX = row.Left;
+        var tickX = row.ContentLeft;
         dc.DrawLine(CharSlotTickPen, new Point(tickX, lyricY + 22), new Point(tickX, lyricY + 26));
         foreach (var element in TextElements(row.Line.Text, chunk.Start, chunk.End))
         {
-            tickX += Measure(element.Text, LyricFontSize, LyricTypeface).Width;
+            tickX += row.IsStacked
+                ? PartAnalyzer.GetHalfCellUnits(element.Text) * StackedHalfCellWidth
+                : Measure(element.Text, LyricFontSize, LyricTypeface).Width;
             dc.DrawLine(CharSlotTickPen, new Point(tickX, lyricY + 22), new Point(tickX, lyricY + 26));
         }
     }
@@ -777,18 +960,28 @@ public sealed class ScoreSurface : FrameworkElement
         base.OnMouseLeftButtonDown(e);
         Focus();
         var point = e.GetPosition(this);
-        if (e.ClickCount >= 2 && FindChord(point) is null && GetAnchorAt(point) is { } editAnchor)
+        if (e.ClickCount >= 2 && FindChord(point) is null)
         {
-            LineEditRequested?.Invoke(editAnchor.LineIndex);
-            e.Handled = true;
-            return;
+            if (GetAnchorAt(point) is { } editAnchor)
+            {
+                LineEditRequested?.Invoke(editAnchor.LineIndex);
+                e.Handled = true;
+                return;
+            }
+            if (FindReferenceRow(point) is not null)
+            {
+                PartArrangeRequested?.Invoke();
+                e.Handled = true;
+                return;
+            }
         }
 
         var hitChord = FindChord(point);
         var hitAnchor = hitChord is null ? GetAnchorAt(point) : null;
         var hitTab = hitChord is null && hitAnchor is null ? FindTabSection(point) : null;
+        var hitRef = hitChord is null && hitAnchor is null && hitTab is null ? FindReferenceRow(point) : null;
 
-        if (hitChord is null && hitAnchor is null && hitTab is null)
+        if (hitChord is null && hitAnchor is null && hitTab is null && hitRef is null)
         {
             if (_selectedPlaced is not null)
             {
@@ -816,9 +1009,10 @@ public sealed class ScoreSurface : FrameworkElement
             var hover = GetAnchorAt(point);
             var overChord = FindChord(point) is not null;
             var overTab = hover is null && !overChord ? FindTabSection(point) : null;
+            var overRef = hover is null && !overChord && overTab is null && FindReferenceRow(point) is not null;
             var nextTabId = overTab?.Section.Id;
 
-            Cursor = hover is not null || overChord || overTab is not null ? Cursors.Hand : Cursors.Arrow;
+            Cursor = hover is not null || overChord || overTab is not null || overRef ? Cursors.Hand : Cursors.Arrow;
             if (hover != _hoverAnchor || nextTabId != _hoverTabSectionId)
             {
                 _hoverAnchor = hover;
@@ -943,6 +1137,13 @@ public sealed class ScoreSurface : FrameworkElement
             InvalidateVisual();
             TabSectionEditRequested?.Invoke(tabHit.Section);
         }
+        else if (FindReferenceRow(point) is not null)
+        {
+            _selectedPlaced = null;
+            SelectionChanged?.Invoke();
+            InvalidateVisual();
+            PartArrangeRequested?.Invoke();
+        }
         else
         {
             _selectedPlaced = null;
@@ -1007,18 +1208,45 @@ public sealed class ScoreSurface : FrameworkElement
             return;
         }
 
+        var refRow = FindReferenceRow(point);
+        if (refRow is not null && Song is not null)
+        {
+            Focus();
+            var menu = new System.Windows.Controls.ContextMenu { PlacementTarget = this };
+            var arrangeItem = new System.Windows.Controls.MenuItem { Header = "整理段落与重复段..." };
+            arrangeItem.Click += (_, _) => PartArrangeRequested?.Invoke();
+            menu.Items.Add(arrangeItem);
+            menu.IsOpen = true;
+            e.Handled = true;
+            return;
+        }
+
         var lineAnchor = GetAnchorAt(point);
         if (lineAnchor is not null && Song is not null)
         {
             Focus();
+            var targetLine = Song.Lines[lineAnchor.LineIndex];
+            var nextVerse = targetLine.AltLyrics.Count + 2;
             var menu = new System.Windows.Controls.ContextMenu { PlacementTarget = this };
-            var editLineItem = new System.Windows.Controls.MenuItem { Header = "编辑此行歌词..." };
+            var editLineItem = new System.Windows.Controls.MenuItem
+            {
+                Header = targetLine.HasStackedLyrics ? "编辑叠行歌词与对齐..." : "编辑此行歌词..."
+            };
             editLineItem.Click += (_, _) => LineEditRequested?.Invoke(lineAnchor.LineIndex);
+            var addAltItem = new System.Windows.Controls.MenuItem
+            {
+                Header = $"添加叠行歌词（第 {nextVerse} 遍）..."
+            };
+            addAltItem.Click += (_, _) => AddAltLyricRequested?.Invoke(lineAnchor.LineIndex);
+            var arrangePartsItem = new System.Windows.Controls.MenuItem { Header = "整理段落与重复段..." };
+            arrangePartsItem.Click += (_, _) => PartArrangeRequested?.Invoke();
             var insertInterludeItem = new System.Windows.Controls.MenuItem { Header = "在此句后插入间奏六线谱..." };
             insertInterludeItem.Click += (_, _) => TabSectionInsertRequested?.Invoke(TabSectionKind.Interlude, lineAnchor.LineIndex);
             var insertIntroItem = new System.Windows.Controls.MenuItem { Header = "在开头添加前奏六线谱..." };
             insertIntroItem.Click += (_, _) => TabSectionInsertRequested?.Invoke(TabSectionKind.Intro, -1);
             menu.Items.Add(editLineItem);
+            menu.Items.Add(addAltItem);
+            menu.Items.Add(arrangePartsItem);
             menu.Items.Add(new System.Windows.Controls.Separator());
             menu.Items.Add(insertInterludeItem);
             menu.Items.Add(insertIntroItem);
@@ -1153,11 +1381,11 @@ public sealed class ScoreSurface : FrameworkElement
     private void DrawGhost(DrawingContext dc, ChordPlacement chord, ChordAnchor target)
     {
         var row = _rows.FirstOrDefault(x => x.Index == target.LineIndex);
-        if (row is null) return;
+        if (row is null || row.Line.IsReferenceLine) return;
         var chunkIndex = FindChunk(row.Chunks, target.Position);
         var chunk = row.Chunks[chunkIndex];
         var end = Math.Clamp(target.Position, chunk.Start, chunk.End);
-        var x = row.Left + Measure(row.Line.Text[chunk.Start..end], LyricFontSize, LyricTypeface).Width;
+        var x = row.ContentLeft + MeasurePrefixWidth(row.Line, chunk.Start, end);
         if (target.BeforeChar)
             x = target.Position == 0 ? Math.Max(8, x - 20) : Math.Max(8, x - 10);
         var y = row.Top + chunk.Top;
@@ -1193,26 +1421,33 @@ public sealed class ScoreSurface : FrameworkElement
             .ThenBy(r => DistanceToRange(point.Y, r.Top, r.Top + r.Height))
             .First();
 
+        if (row.Line.IsReferenceLine)
+            return null;
+
         var chunk = row.Chunks.LastOrDefault(candidate => row.Top + candidate.Top <= point.Y) ?? row.Chunks[0];
-        var targetX = point.X - row.Left;
+        var targetX = point.X - row.ContentLeft;
         if (targetX < -24) return null;
         if (targetX < 0)
             return new ChordAnchor(row.Index, chunk.Start, BeforeChar: true);
 
-        var totalChunkWidth = Measure(chunk.Text, LyricFontSize, LyricTypeface).Width;
+        var totalChunkWidth = MeasureTextWidth(row.Line, chunk.Text);
         if (chunk.Text.Length > 0 && targetX > totalChunkWidth + 36)
             return null;
 
-        var width = 0d;
-        var position = chunk.Start;
-        foreach (var element in TextElements(row.Line.Text, chunk.Start, chunk.End))
-        {
-            var nextWidth = Measure(element.Text, LyricFontSize, LyricTypeface).Width;
-            position = element.Start;
-            if (targetX < width + nextWidth) break;
-            width += nextWidth;
-        }
+        var position = GetPositionFromOffsetX(row.Line, chunk, targetX);
         return new ChordAnchor(row.Index, position, BeforeChar: false);
+    }
+
+    private RowLayout? FindReferenceRow(Point point)
+    {
+        foreach (var row in _rows)
+        {
+            if (!row.Line.IsReferenceLine) continue;
+            var rect = new Rect(row.Left - 4, row.Top, row.Width + 8, row.Height);
+            if (rect.Contains(point))
+                return row;
+        }
+        return null;
     }
 
     private Hit? FindChord(Point point)
@@ -1241,6 +1476,48 @@ public sealed class ScoreSurface : FrameworkElement
         return null;
     }
 
+    private double MeasurePrefixWidth(LyricLine line, int start, int end)
+    {
+        if (end <= start) return 0;
+        return line.HasStackedLyrics
+            ? PartAnalyzer.MeasureHalfCells(line.Text[start..end]) * StackedHalfCellWidth
+            : Measure(line.Text[start..end], LyricFontSize, LyricTypeface).Width;
+    }
+
+    private double MeasureElementWidth(LyricLine line, int index)
+    {
+        if (!line.HasStackedLyrics)
+            return MeasureElementAt(line.Text, index);
+        if (string.IsNullOrEmpty(line.Text) || index < 0 || index >= line.Text.Length)
+            return StackedFullCellWidth;
+        var element = StringInfo.GetNextTextElement(line.Text, index);
+        return PartAnalyzer.GetHalfCellUnits(element) * StackedHalfCellWidth;
+    }
+
+    private double MeasureTextWidth(LyricLine line, string text)
+    {
+        if (string.IsNullOrEmpty(text)) return 0;
+        return line.HasStackedLyrics
+            ? PartAnalyzer.MeasureHalfCells(text) * StackedHalfCellWidth
+            : Measure(text, LyricFontSize, LyricTypeface).Width;
+    }
+
+    private int GetPositionFromOffsetX(LyricLine line, TextChunk chunk, double targetX)
+    {
+        var width = 0d;
+        var position = chunk.Start;
+        foreach (var element in TextElements(line.Text, chunk.Start, chunk.End))
+        {
+            var nextWidth = line.HasStackedLyrics
+                ? PartAnalyzer.GetHalfCellUnits(element.Text) * StackedHalfCellWidth
+                : Measure(element.Text, LyricFontSize, LyricTypeface).Width;
+            position = element.Start;
+            if (targetX < width + nextWidth) break;
+            width += nextWidth;
+        }
+        return position;
+    }
+
     private List<TextChunk> Wrap(string text, double maxWidth)
     {
         var chunks = new List<TextChunk>();
@@ -1252,7 +1529,7 @@ public sealed class ScoreSurface : FrameworkElement
             var elementWidth = Measure(element.Text, LyricFontSize, LyricTypeface).Width;
             if (current.Length > 0 && width + elementWidth > maxWidth)
             {
-                chunks.Add(new TextChunk(chunks.Count, start, element.Start, current));
+                chunks.Add(new TextChunk(chunks.Count, start, element.Start, current, []));
                 current = "";
                 start = element.Start;
                 width = 0;
@@ -1260,9 +1537,89 @@ public sealed class ScoreSurface : FrameworkElement
             current += element.Text;
             width += elementWidth;
         }
-        if (current.Length > 0) chunks.Add(new TextChunk(chunks.Count, start, text.Length, current));
-        if (chunks.Count == 0) chunks.Add(new TextChunk(0, 0, 0, ""));
+        if (current.Length > 0) chunks.Add(new TextChunk(chunks.Count, start, text.Length, current, []));
+        if (chunks.Count == 0) chunks.Add(new TextChunk(0, 0, 0, "", []));
         return chunks;
+    }
+
+    private static List<TextChunk> WrapStacked(LyricLine line, double maxWidth)
+    {
+        var maxCells = Math.Max(12, (int)Math.Floor(maxWidth / StackedHalfCellWidth));
+        var rawPrimary = new List<(int Start, int End, string Text, int StartCell, int EndCell)>();
+        var current = "";
+        var start = 0;
+        var startCell = 0;
+        var curCells = 0;
+
+        foreach (var element in TextElements(line.Text, 0, line.Text.Length))
+        {
+            var units = PartAnalyzer.GetHalfCellUnits(element.Text);
+            if (current.Length > 0 && curCells + units > maxCells)
+            {
+                rawPrimary.Add((start, element.Start, current, startCell, startCell + curCells));
+                startCell += curCells;
+                current = "";
+                start = element.Start;
+                curCells = 0;
+            }
+            current += element.Text;
+            curCells += units;
+        }
+
+        if (current.Length > 0)
+            rawPrimary.Add((start, line.Text.Length, current, startCell, startCell + curCells));
+        if (rawPrimary.Count == 0)
+            rawPrimary.Add((0, 0, "", 0, 0));
+
+        var altSliced = new List<List<string>>(rawPrimary.Count);
+        for (var i = 0; i < rawPrimary.Count; i++)
+            altSliced.Add([]);
+
+        foreach (var alt in line.AltLyrics)
+        {
+            var slices = SliceByCellRanges(alt, rawPrimary);
+            for (var i = 0; i < rawPrimary.Count; i++)
+                altSliced[i].Add(slices[i]);
+        }
+
+        var chunks = new List<TextChunk>(rawPrimary.Count);
+        for (var i = 0; i < rawPrimary.Count; i++)
+        {
+            var p = rawPrimary[i];
+            chunks.Add(new TextChunk(i, p.Start, p.End, p.Text, altSliced[i]));
+        }
+        return chunks;
+    }
+
+    private static List<string> SliceByCellRanges(string text, List<(int Start, int End, string Text, int StartCell, int EndCell)> ranges)
+    {
+        var results = Enumerable.Repeat("", ranges.Count).ToList();
+        if (string.IsNullOrEmpty(text) || ranges.Count == 0) return results;
+
+        var builders = new System.Text.StringBuilder[ranges.Count];
+        for (var i = 0; i < ranges.Count; i++)
+            builders[i] = new System.Text.StringBuilder();
+
+        var cellPos = 0;
+        var chunkIdx = 0;
+        var enumerator = StringInfo.GetTextElementEnumerator(text);
+        while (enumerator.MoveNext())
+        {
+            var element = enumerator.GetTextElement();
+            var units = PartAnalyzer.GetHalfCellUnits(element);
+            while (chunkIdx < ranges.Count - 1 && cellPos >= ranges[chunkIdx].EndCell)
+            {
+                chunkIdx++;
+                if (cellPos > ranges[chunkIdx].StartCell && builders[chunkIdx].Length == 0)
+                    builders[chunkIdx].Append(' ', cellPos - ranges[chunkIdx].StartCell);
+            }
+            builders[chunkIdx].Append(element);
+            cellPos += units;
+        }
+
+        for (var i = 0; i < ranges.Count; i++)
+            results[i] = builders[i].ToString();
+        return results;
     }
 
     private double MeasureElementAt(string text, int index)
@@ -1354,9 +1711,9 @@ public sealed class ScoreSurface : FrameworkElement
         return null;
     }
 
-    private sealed record TextChunk(int Index, int Start, int End, string Text, double Top = 0, double LyricTop = 0);
+    private sealed record TextChunk(int Index, int Start, int End, string Text, List<string> AltSlices, double Top = 0, double LyricTop = 0);
     private sealed record Placement(int LineIndex, int ChordIndex, ChordPlacement Chord, double X, double AnchorX, double CharWidth, string TargetChar, double Y, int ChunkIndex);
-    private sealed record RowLayout(int Index, int Column, LyricLine Line, double Left, double Width, double Top, double Height, List<TextChunk> Chunks, List<Placement> Placements);
+    private sealed record RowLayout(int Index, int Column, LyricLine Line, double Left, double ContentLeft, double Width, double Top, double Height, bool HasPartHeader, double PartHeaderTop, bool IsStacked, List<TextChunk> Chunks, List<Placement> Placements);
     private sealed record TabSectionLayout(TabSection Section, Rect Bounds);
     private sealed record Hit(int LineIndex, int ChordIndex);
 }

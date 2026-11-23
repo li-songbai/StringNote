@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Text.Json.Serialization;
 
 namespace Xianpu.Desktop;
 
@@ -65,7 +66,30 @@ public sealed class SongModel : INotifyPropertyChanged
 public sealed class LyricLine
 {
     public string Text { get; set; } = "";
+    public List<string> AltLyrics { get; set; } = [];
+    public string PartTitle { get; set; } = "";
+    public int RepeatCount { get; set; } = 1;
+    public bool IsReferenceLine { get; set; }
     public List<ChordPlacement> Chords { get; set; } = [];
+
+    [JsonIgnore]
+    public bool HasStackedLyrics => AltLyrics is { Count: > 0 };
+
+    public LyricLine Clone() => new()
+    {
+        Text = Text,
+        AltLyrics = AltLyrics is { Count: > 0 } ? [.. AltLyrics] : [],
+        PartTitle = PartTitle,
+        RepeatCount = RepeatCount,
+        IsReferenceLine = IsReferenceLine,
+        Chords = Chords.Select(c => new ChordPlacement
+        {
+            Position = c.Position,
+            BeforeChar = c.BeforeChar,
+            Name = c.Name,
+            ShapeId = c.ShapeId
+        }).ToList()
+    };
 }
 
 public sealed class ChordPlacement

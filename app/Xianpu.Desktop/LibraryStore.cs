@@ -94,7 +94,28 @@ public sealed class LibraryStore
         foreach (var line in song.Lines)
         {
             line.Text ??= "";
+            line.PartTitle = (line.PartTitle ?? "").Trim();
+            line.RepeatCount = Math.Clamp(line.RepeatCount <= 0 ? 1 : line.RepeatCount, 1, 16);
+            line.AltLyrics ??= [];
             line.Chords ??= [];
+
+            if (line.IsReferenceLine)
+            {
+                line.AltLyrics.Clear();
+                line.Chords.Clear();
+            }
+            else
+            {
+                for (var i = 0; i < line.AltLyrics.Count; i++)
+                    line.AltLyrics[i] = (line.AltLyrics[i] ?? "").Replace("\r", "", StringComparison.Ordinal).Replace("\n", "", StringComparison.Ordinal);
+
+                while (line.AltLyrics.Count > 0 && string.IsNullOrWhiteSpace(line.AltLyrics[^1]))
+                    line.AltLyrics.RemoveAt(line.AltLyrics.Count - 1);
+
+                if (line.AltLyrics.Count > 0 && line.AltLyrics.All(string.IsNullOrWhiteSpace))
+                    line.AltLyrics.Clear();
+            }
+
             var length = line.Text.Length;
             foreach (var chord in line.Chords)
             {

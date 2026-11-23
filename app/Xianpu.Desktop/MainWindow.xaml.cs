@@ -88,6 +88,8 @@ public partial class MainWindow : Window
         ScoreSurface.TabSectionDuplicateRequested += DuplicateTabSection;
         ScoreSurface.TabSectionDeleteRequested += DeleteTabSection;
         ScoreSurface.TabSectionInsertRequested += InsertNewTabSection;
+        ScoreSurface.AddAltLyricRequested += idx => OpenStackedLyricEditor(idx, addNewRow: true);
+        ScoreSurface.PartArrangeRequested += OpenPartArrangeDialog;
 
         Loaded += (_, _) =>
         {
@@ -217,6 +219,7 @@ public partial class MainWindow : Window
         UpdateCaptionTitle();
         ScoreSurface.SetSong(song);
         song.PropertyChanged += SelectedSong_PropertyChanged;
+        UpdatePartArrangeButtonCue();
         RefreshQuickChordBar();
         RefreshCategoryOptions();
         RefreshLibraryList();
@@ -859,7 +862,19 @@ public partial class MainWindow : Window
             if (string.IsNullOrWhiteSpace(song.SelectedKey))
                 song.SelectedKey = "C";
             SelectSong(song);
-            SetStatus($"已导入《{song.Title}》（共 {song.Lines.Count} 行歌词），点击歌词上的进唱字位即可添加左手和弦。");
+            var summary = PartAnalyzer.SummarizeCandidates(song);
+            if (summary.DuplicateGroups > 0 || summary.StackableGroups > 0)
+            {
+                SetStatus($"已导入《{song.Title}》（共 {song.Lines.Count} 行，预分 {summary.PartCount} 段，检测到 {summary.DuplicateGroups} 组同词、{summary.StackableGroups} 组可叠行段落，可点「段落编排」一键整理）。");
+            }
+            else if (summary.PartCount > 1)
+            {
+                SetStatus($"已导入《{song.Title}》（共 {song.Lines.Count} 行，已自动分为 {summary.PartCount} 段），点击进唱字位即可填入左手和弦。");
+            }
+            else
+            {
+                SetStatus($"已导入《{song.Title}》（共 {song.Lines.Count} 行歌词），点击歌词上的进唱字位即可添加左手和弦。");
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
@@ -1089,25 +1104,125 @@ public partial class MainWindow : Window
     private void EditAllLyrics_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedSong is null) return;
-        var currentText = string.Join(Environment.NewLine, _selectedSong.Lines.Select(x => x.Text));
-        var updatedText = PromptLyrics("编辑或粘贴全文歌词", "每行对应一句歌词（支持直接粘贴带 [mm:ss] 时间戳的 LRC 内容；未改动的歌词行会自动保留已填和弦）：", currentText, height: 480);
+        var currentText = FormatLyricsForBatchEdit(_selectedSong);
+        var updatedText = PromptLyrics("编辑或粘贴全文歌词", "每行对应一句歌词（支持空行、[主歌]/[副歌] 分段及带 [mm:ss] 时间戳的 LRC 内容；未改动的歌词行会自动保留已填和弦和叠行）：", currentText, height: 480);
         if (updatedText is null) return;
 
         ApplyFullLyricsEdit(_selectedSong, updatedText);
         ScoreSurface.SetSong(_selectedSong);
         UpdateViewportScale();
         SaveLibraryQuietly();
-        SetStatus($"已更新歌词（共 {_selectedSong.Lines.Count} 行）。");
+        UpdatePartArrangeButtonCue();
+
+        var summary = PartAnalyzer.SummarizeCandidates(_selectedSong);
+        if (summary.DuplicateGroups > 0 || summary.StackableGroups > 0)
+            SetStatus($"已更新歌词（共 {_selectedSong.Lines.Count} 行，检测到 {summary.DuplicateGroups} 组同词、{summary.StackableGroups} 组可叠行段落，可点「段落编排」整理）。");
+        else
+            SetStatus($"已更新歌词（共 {_selectedSong.Lines.Count} 行）。");
+    }
+
+    private void PartArrange_Click(object sender, RoutedEventArgs e) => OpenPartArrangeDialog();
+
+    private void OpenPartArrangeDialog()
+    {
+        if (_selectedSong is null) return;
+        var updatedLines = PartArrangeDialog.Show(this, _selectedSong);
+        if (updatedLines is null) return;
+
+        var oldLines = _selectedSong.Lines.ToList();
+        _selectedSong.Lines.Clear();
+        foreach (var line in updatedLines)
+            _selectedSong.Lines.Add(line);
+
+        PartAnalyzer.RemapTabSections(_selectedSong, oldLines, _selectedSong.Lines);
+        LibraryStore.NormalizeSong(_selectedSong);
+        ScoreSurface.SetSong(_selectedSong);
+        UpdateViewportScale();
+        SaveLibraryQuietly();
+        UpdatePartArrangeButtonCue();
+
+        var stackedCount = _selectedSong.Lines.Count(l => l.HasStackedLyrics);
+        var refCount = _selectedSong.Lines.Count(l => l.IsReferenceLine);
+        SetStatus($"已应用段落编排（当前 {_selectedSong.Lines.Count} 行，含 {stackedCount} 句多段叠行、{refCount} 处反复引用）。");
+    }
+
+    private void OpenStackedLyricEditor(int index, bool addNewRow)
+    {
+        if (_selectedSong is null || index < 0 || index >= _selectedSong.Lines.Count) return;
+        var line = _selectedSong.Lines[index];
+        if (line.IsReferenceLine)
+        {
+            OpenPartArrangeDialog();
+            return;
+        }
+
+        var result = StackedLyricDialog.Show(this, line, addNewRow);
+        if (result is null) return;
+
+        line.Text = result.PrimaryText;
+        line.AltLyrics = result.AltLyrics;
+        foreach (var chord in line.Chords)
+            chord.Position = Math.Clamp(chord.Position, 0, line.Text.Length);
+
+        LibraryStore.NormalizeSong(_selectedSong);
+        ScoreSurface.SetSong(_selectedSong);
+        UpdateViewportScale();
+        SaveLibraryQuietly();
+        UpdatePartArrangeButtonCue();
+        SetStatus(line.HasStackedLyrics
+            ? $"已保存多段叠行歌词（共 {1 + line.AltLyrics.Count} 遍）。"
+            : "已更新该行歌词。");
+    }
+
+    private void UpdatePartArrangeButtonCue()
+    {
+        if (PartArrangeButton is null || _selectedSong is null) return;
+
+        var hasStructuredParts = _selectedSong.Lines.Any(l =>
+            !string.IsNullOrWhiteSpace(l.PartTitle) || l.HasStackedLyrics || l.IsReferenceLine);
+
+        var highlight = false;
+        if (!hasStructuredParts && _selectedSong.Lines.Count >= 4)
+        {
+            var summary = PartAnalyzer.SummarizeCandidates(_selectedSong);
+            highlight = summary.DuplicateGroups > 0 || summary.StackableGroups > 0;
+        }
+
+        PartArrangeButton.Style = highlight
+            ? TryFindResource("AccentOutlineButton") as Style
+            : null;
+    }
+
+    private static string FormatLyricsForBatchEdit(SongModel song)
+    {
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < song.Lines.Count; i++)
+        {
+            var line = song.Lines[i];
+            if (!string.IsNullOrWhiteSpace(line.PartTitle))
+            {
+                if (sb.Length > 0) sb.AppendLine();
+                sb.AppendLine($"--- {line.PartTitle} ---");
+            }
+            sb.AppendLine(line.Text);
+        }
+        return sb.ToString().TrimEnd();
     }
 
     private static void ApplyFullLyricsEdit(SongModel song, string rawText)
     {
-        if (rawText.Contains('[') && rawText.Contains(':'))
+        if (string.IsNullOrWhiteSpace(rawText))
+        {
+            song.Lines.Clear();
+            return;
+        }
+
+        try
         {
             var imported = LrcImporter.ImportText(rawText, song.Title);
             if (imported.Lines.Count > 0)
             {
-                MergeLyricLinesPreservingChords(song, imported.Lines.Select(x => x.Text).ToList());
+                MergeLyricLinesPreservingChords(song, imported.Lines.ToList());
                 if (!string.IsNullOrWhiteSpace(imported.OriginalKey) && string.IsNullOrWhiteSpace(song.OriginalKey))
                     song.OriginalKey = imported.OriginalKey;
                 if (!string.IsNullOrWhiteSpace(imported.SelectedKey) && string.IsNullOrWhiteSpace(song.SelectedKey))
@@ -1117,26 +1232,33 @@ public partial class MainWindow : Window
                 return;
             }
         }
+        catch (InvalidDataException)
+        {
+            // Fall back to line splitting if the text only contained filtered headers/tags
+        }
 
-        var newTexts = rawText
+        var fallbackLines = rawText
             .Replace("\r\n", "\n", StringComparison.Ordinal)
             .Split('\n', StringSplitOptions.RemoveEmptyEntries)
             .Select(x => x.Trim())
             .Where(x => x.Length > 0)
+            .Select(x => new LyricLine { Text = x })
             .ToList();
 
-        MergeLyricLinesPreservingChords(song, newTexts);
+        MergeLyricLinesPreservingChords(song, fallbackLines);
     }
 
-    private static void MergeLyricLinesPreservingChords(SongModel song, List<string> newTexts)
+    private static void MergeLyricLinesPreservingChords(SongModel song, List<LyricLine> incomingLines)
     {
         var oldLines = song.Lines.ToList();
         var usedOldIndices = new HashSet<int>();
-        var result = new List<LyricLine>(newTexts.Count);
+        var result = new List<LyricLine>(incomingLines.Count);
+        var hasIncomingPartTitles = incomingLines.Any(x => !string.IsNullOrWhiteSpace(x.PartTitle));
 
-        for (var i = 0; i < newTexts.Count; i++)
+        for (var i = 0; i < incomingLines.Count; i++)
         {
-            var text = newTexts[i];
+            var incoming = incomingLines[i];
+            var text = incoming.Text;
             LyricLine? matched = null;
 
             if (i < oldLines.Count && !usedOldIndices.Contains(i) && oldLines[i].Text == text)
@@ -1152,7 +1274,7 @@ public partial class MainWindow : Window
                     matched = oldLines[foundIdx];
                     usedOldIndices.Add(foundIdx);
                 }
-                else if (i < oldLines.Count && !usedOldIndices.Contains(i) && oldLines.Count == newTexts.Count)
+                else if (i < oldLines.Count && !usedOldIndices.Contains(i) && oldLines.Count == incomingLines.Count)
                 {
                     matched = oldLines[i];
                     matched.Text = text;
@@ -1162,7 +1284,16 @@ public partial class MainWindow : Window
                 }
             }
 
-            result.Add(matched ?? new LyricLine { Text = text });
+            if (matched is not null)
+            {
+                if (hasIncomingPartTitles)
+                    matched.PartTitle = incoming.PartTitle;
+                result.Add(matched);
+            }
+            else
+            {
+                result.Add(incoming);
+            }
         }
 
         song.Lines.Clear();
@@ -1175,6 +1306,17 @@ public partial class MainWindow : Window
     {
         if (_selectedSong is null || index < 0 || index >= _selectedSong.Lines.Count) return;
         var oldLine = _selectedSong.Lines[index];
+        if (oldLine.IsReferenceLine)
+        {
+            OpenPartArrangeDialog();
+            return;
+        }
+        if (oldLine.HasStackedLyrics)
+        {
+            OpenStackedLyricEditor(index, addNewRow: false);
+            return;
+        }
+
         var text = PromptLyrics("编辑单行歌词", "修改当前行歌词（留空确定可删除该行；输入多行可拆分为多句）：", oldLine.Text, height: 260);
         if (text is null) return;
 
@@ -1187,7 +1329,16 @@ public partial class MainWindow : Window
 
         if (newLines.Count == 0)
         {
+            var carryPartTitle = oldLine.PartTitle;
+            var carryRepeat = oldLine.RepeatCount;
             _selectedSong.Lines.RemoveAt(index);
+            if (index < _selectedSong.Lines.Count &&
+                string.IsNullOrWhiteSpace(_selectedSong.Lines[index].PartTitle) &&
+                !string.IsNullOrWhiteSpace(carryPartTitle))
+            {
+                _selectedSong.Lines[index].PartTitle = carryPartTitle;
+                _selectedSong.Lines[index].RepeatCount = carryRepeat;
+            }
         }
         else
         {
@@ -1783,17 +1934,7 @@ public partial class MainWindow : Window
             ShowTabSections = _selectedSong.ShowTabSections,
             UpdatedAt = DateTime.Now,
             Lines = new System.Collections.ObjectModel.ObservableCollection<LyricLine>(
-                _selectedSong.Lines.Select(line => new LyricLine
-                {
-                    Text = line.Text,
-                    Chords = line.Chords.Select(c => new ChordPlacement
-                    {
-                        Position = c.Position,
-                        BeforeChar = c.BeforeChar,
-                        Name = c.Name,
-                        ShapeId = c.ShapeId
-                    }).ToList()
-                })),
+                _selectedSong.Lines.Select(line => line.Clone())),
             TabSections = new System.Collections.ObjectModel.ObservableCollection<TabSection>(
                 _selectedSong.TabSections.Select(t => t.Clone()))
         };
