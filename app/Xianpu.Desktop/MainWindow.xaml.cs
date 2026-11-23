@@ -854,6 +854,26 @@ public partial class MainWindow : Window
         ImportLrcFile(dialog.FileName);
     }
 
+    private void AiImport_Click(object sender, RoutedEventArgs e)
+    {
+        var result = AiImportDialog.Show(this, hasCurrentSong: _selectedSong is not null);
+        if (result is not { Accepted: true, Parsed: { } parsed })
+            return;
+
+        if (result.AppendToCurrent && _selectedSong is not null)
+        {
+            CommitFields();
+            AiScoreImporter.MergeIntoSong(_selectedSong, parsed.Song);
+            SelectSong(_selectedSong);
+            SetStatus($"AI 追加导入成功（+{parsed.LineCount} 句歌词、+{parsed.ChordCount} 个和弦、+{parsed.TabBarCount} 个六线谱小节），点击「保存」可更新到本地曲库。");
+        }
+        else
+        {
+            SelectSong(parsed.Song);
+            SetStatus($"AI 导入成功：《{parsed.Song.Title}》（{parsed.DetectedKind} · {parsed.LineCount} 句歌词、{parsed.ChordCount} 个和弦、{parsed.TabBarCount} 个六线谱小节），点击「保存」可加入本地曲库。");
+        }
+    }
+
     private void ImportLrcFile(string filePath)
     {
         try

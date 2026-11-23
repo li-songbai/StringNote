@@ -247,6 +247,7 @@
                     <!-- Action Buttons (Gracefully wraps when narrow, never clips off-screen) -->
                     <WrapPanel VerticalAlignment="Center">
                         <Button Content="导入 LRC" Style="{StaticResource AccentOutlineButton}" Click="ImportLrc_Click" Margin="0,2,5,2" ToolTip="导入 .lrc 或 .txt 歌词文件（也支持直接拖入窗口）" />
+                        <Button Content="AI 识谱导入" Style="{StaticResource AccentOutlineButton}" Click="AiImport_Click" Margin="0,2,5,2" ToolTip="复制专属 Prompt 发给任意 AI 识别图片谱，再粘贴 JSON 直接导入为弹唱谱或指弹谱" />
                         <Button Content="编辑歌词" Click="EditAllLyrics_Click" Margin="0,2,5,2" ToolTip="粘贴或批量修改整首歌词（保留已有和弦）" />
                         <Button x:Name="PartArrangeButton" Content="段落编排" Click="PartArrange_Click" Margin="0,2,5,2" ToolTip="拆分主歌/副歌段落、合并多遍叠行歌词或折叠重复段" />
                         <Button Content="清空新谱" Click="NewSong_Click" Margin="0,2,8,2" ToolTip="新建空白曲谱" />
