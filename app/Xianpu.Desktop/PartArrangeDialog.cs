@@ -86,7 +86,7 @@ internal static class PartArrangeDialog
 
         var copyChordsBtn = AppDialogs.CreateSecondaryButton(owner, "复制和弦到勾选段", minWidth: 126);
         copyChordsBtn.Margin = new Thickness(0, 2, 6, 2);
-        copyChordsBtn.ToolTip = "把第一个勾选段落的和弦按比例复制到其余勾选段落";
+        copyChordsBtn.ToolTip = "把已填和弦的勾选段落按比例复制到其余勾选段落";
 
         var expandAllBtn = AppDialogs.CreateSecondaryButton(owner, "全部展开叠行", minWidth: 104);
         expandAllBtn.Margin = new Thickness(0, 2, 0, 2);
@@ -123,7 +123,7 @@ internal static class PartArrangeDialog
                 .ToList();
 
             foldStackBtn.IsEnabled = validChecked.Count >= 2;
-            copyChordsBtn.IsEnabled = validChecked.Count >= 2 && currentParts[validChecked[0]].ChordCount > 0;
+            copyChordsBtn.IsEnabled = validChecked.Count >= 2 && validChecked.Any(idx => currentParts[idx].ChordCount > 0);
             expandAllBtn.IsEnabled = currentParts.Any(p => p.HasStacked);
 
             var dupCount = currentParts.Count(p => p.DuplicateOfPartIndex is not null);
@@ -193,7 +193,10 @@ internal static class PartArrangeDialog
                 .OrderBy(idx => idx)
                 .ToList();
             if (indices.Count < 2) return;
-            PartAnalyzer.CopyPartChords(workingLines, indices[0], indices.Skip(1).ToList());
+            var sourceIdx = indices.FirstOrDefault(idx => currentParts[idx].ChordCount > 0, -1);
+            if (sourceIdx < 0) return;
+            var targets = indices.Where(idx => idx != sourceIdx).ToList();
+            PartAnalyzer.CopyPartChords(workingLines, sourceIdx, targets);
             RebuildCards();
         };
 
@@ -356,24 +359,74 @@ internal static class PartArrangeDialog
             removeRefBtn.Click += (_, _) =>
             {
                 workingLines.RemoveAt(part.StartLine);
+                checkedParts.Clear();
                 onMutated();
             };
             rightActions.Children.Add(removeRefBtn);
         }
-        else if (part.PartIndex > 0 && !allParts[part.PartIndex - 1].IsReference)
+        else
         {
-            var mergePrevBtn = AppDialogs.CreateSecondaryButton(owner, "↑ 并入上段", minWidth: 82);
-            mergePrevBtn.Padding = new Thickness(8, 3, 8, 3);
-            mergePrevBtn.FontSize = 11.5;
-            mergePrevBtn.Margin = new Thickness(4, 1, 0, 1);
-            mergePrevBtn.ToolTip = "取消当前段落分隔，并入上一段";
-            mergePrevBtn.Click += (_, _) =>
+            var dupBtn = AppDialogs.CreateSecondaryButton(owner, "复制段", minWidth: 56);
+            dupBtn.Padding = new Thickness(8, 3, 8, 3);
+            dupBtn.FontSize = 11.5;
+            dupBtn.Margin = new Thickness(4, 1, 0, 1);
+            dupBtn.ToolTip = "在当前段落紧邻下方复制出一份完全相同的段落（含和弦）";
+            dupBtn.Click += (_, _) =>
             {
-                firstLine.PartTitle = "";
-                firstLine.RepeatCount = 1;
+                PartAnalyzer.DuplicatePart(workingLines, part.PartIndex, includeChords: true);
+                checkedParts.Clear();
                 onMutated();
             };
-            rightActions.Children.Add(mergePrevBtn);
+            rightActions.Children.Add(dupBtn);
+
+            if (part.PartIndex > 0 && !allParts[part.PartIndex - 1].IsReference)
+            {
+                var mergePrevBtn = AppDialogs.CreateSecondaryButton(owner, "↑ 并入上段", minWidth: 82);
+                mergePrevBtn.Padding = new Thickness(8, 3, 8, 3);
+                mergePrevBtn.FontSize = 11.5;
+                mergePrevBtn.Margin = new Thickness(4, 1, 0, 1);
+                mergePrevBtn.ToolTip = "取消当前段落分隔，并入上一段";
+                mergePrevBtn.Click += (_, _) =>
+                {
+                    firstLine.PartTitle = "";
+                    firstLine.RepeatCount = 1;
+                    checkedParts.Clear();
+                    onMutated();
+                };
+                rightActions.Children.Add(mergePrevBtn);
+            }
+        }
+
+        if (allParts.Count > 1)
+        {
+            var moveUpBtn = AppDialogs.CreateSecondaryButton(owner, "↑", minWidth: 28);
+            moveUpBtn.Padding = new Thickness(6, 3, 6, 3);
+            moveUpBtn.FontSize = 11.5;
+            moveUpBtn.Margin = new Thickness(4, 1, 0, 1);
+            moveUpBtn.IsEnabled = part.PartIndex > 0;
+            moveUpBtn.ToolTip = "将此段上移";
+            moveUpBtn.Click += (_, _) =>
+            {
+                PartAnalyzer.MovePart(workingLines, part.PartIndex, -1);
+                checkedParts.Clear();
+                onMutated();
+            };
+
+            var moveDownBtn = AppDialogs.CreateSecondaryButton(owner, "↓", minWidth: 28);
+            moveDownBtn.Padding = new Thickness(6, 3, 6, 3);
+            moveDownBtn.FontSize = 11.5;
+            moveDownBtn.Margin = new Thickness(3, 1, 0, 1);
+            moveDownBtn.IsEnabled = part.PartIndex < allParts.Count - 1;
+            moveDownBtn.ToolTip = "将此段下移";
+            moveDownBtn.Click += (_, _) =>
+            {
+                PartAnalyzer.MovePart(workingLines, part.PartIndex, +1);
+                checkedParts.Clear();
+                onMutated();
+            };
+
+            rightActions.Children.Add(moveUpBtn);
+            rightActions.Children.Add(moveDownBtn);
         }
 
         DockPanel.SetDock(rightActions, Dock.Right);

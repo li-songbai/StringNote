@@ -123,6 +123,49 @@ public enum TabSectionKind
     Outro
 }
 
+public enum TabDuration
+{
+    Auto = 0,
+    Whole = 1,
+    Half = 2,
+    Quarter = 4,
+    Eighth = 8,
+    Sixteenth = 16
+}
+
+public enum TabStrumKind
+{
+    None = 0,
+    Down = 1,
+    Up = 2,
+    Mute = 3,
+    Arpeggio = 4
+}
+
+public enum TabLinkKind
+{
+    None = 0,
+    HammerOn = 1,
+    PullOff = 2,
+    Slide = 3,
+    Tie = 4
+}
+
+public enum TabNoteTechnique
+{
+    None = 0,
+    BendFull = 1,
+    BendHalf = 2,
+    BendRelease = 3,
+    NaturalHarmonic = 4,
+    ArtificialHarmonic = 5,
+    Vibrato = 6,
+    GhostNote = 7,
+    SlideIn = 8,
+    SlideOut = 9,
+    BendHalfRelease = 10
+}
+
 public sealed class TabSection
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
@@ -131,6 +174,7 @@ public sealed class TabSection
     public int InsertAfterLineIndex { get; set; } = -1; // -1 = 前奏(歌词前), >= 0 = 插在对应歌词行后
     public string TimeSignature { get; set; } = "4/4";
     public int ColumnsPerBar { get; set; } = 8;
+    public bool ShowRhythmStems { get; set; } = true;
     public List<TabBar> Bars { get; set; } = [];
 
     public TabSection Clone() => new()
@@ -141,6 +185,7 @@ public sealed class TabSection
         InsertAfterLineIndex = InsertAfterLineIndex,
         TimeSignature = TimeSignature,
         ColumnsPerBar = ColumnsPerBar,
+        ShowRhythmStems = ShowRhythmStems,
         Bars = Bars.Select(b => b.Clone()).ToList()
     };
 }
@@ -148,14 +193,29 @@ public sealed class TabSection
 public sealed class TabBar
 {
     public int ColumnCount { get; set; } = 8;
+    public bool RepeatStart { get; set; }
+    public bool RepeatEnd { get; set; }
     public List<TabNote> Notes { get; set; } = [];
     public List<TabChordMark> ChordMarks { get; set; } = [];
+    public List<TabColumnMeta> ColumnMetas { get; set; } = [];
 
     public TabBar Clone() => new()
     {
         ColumnCount = ColumnCount,
-        Notes = Notes.Select(n => new TabNote { Column = n.Column, StringIndex = n.StringIndex, Fret = n.Fret }).ToList(),
-        ChordMarks = ChordMarks.Select(m => new TabChordMark { Column = m.Column, Text = m.Text }).ToList()
+        RepeatStart = RepeatStart,
+        RepeatEnd = RepeatEnd,
+        Notes = Notes.Select(n => new TabNote
+        {
+            Column = n.Column,
+            StringIndex = n.StringIndex,
+            Fret = n.Fret,
+            LinkToNext = n.LinkToNext,
+            GraceFret = n.GraceFret,
+            GraceLink = n.GraceLink,
+            Technique = n.Technique
+        }).ToList(),
+        ChordMarks = ChordMarks.Select(m => new TabChordMark { Column = m.Column, Text = m.Text }).ToList(),
+        ColumnMetas = ColumnMetas.Select(m => m.Clone()).ToList()
     };
 }
 
@@ -164,6 +224,30 @@ public sealed class TabNote
     public int Column { get; set; }
     public int StringIndex { get; set; } // 0 = 1弦(e) .. 5 = 6弦(E)
     public string Fret { get; set; } = "";
+    public TabLinkKind LinkToNext { get; set; } = TabLinkKind.None;
+    public string GraceFret { get; set; } = "";
+    public TabLinkKind GraceLink { get; set; } = TabLinkKind.None;
+    public TabNoteTechnique Technique { get; set; } = TabNoteTechnique.None;
+}
+
+public sealed class TabColumnMeta
+{
+    public int Column { get; set; }
+    public TabDuration Duration { get; set; } = TabDuration.Auto;
+    public bool Dotted { get; set; }
+    public bool IsRest { get; set; }
+    public TabStrumKind Strum { get; set; } = TabStrumKind.None;
+    public bool PalmMute { get; set; }
+
+    public TabColumnMeta Clone() => new()
+    {
+        Column = Column,
+        Duration = Duration,
+        Dotted = Dotted,
+        IsRest = IsRest,
+        Strum = Strum,
+        PalmMute = PalmMute
+    };
 }
 
 public sealed class TabChordMark

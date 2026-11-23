@@ -90,6 +90,8 @@ public partial class MainWindow : Window
         ScoreSurface.TabSectionInsertRequested += InsertNewTabSection;
         ScoreSurface.AddAltLyricRequested += idx => OpenStackedLyricEditor(idx, addNewRow: true);
         ScoreSurface.PartArrangeRequested += OpenPartArrangeDialog;
+        ScoreSurface.InsertPartAfterRequested += OpenInsertPartDialog;
+        ScoreSurface.StatusMessageRequested += SetStatus;
 
         Loaded += (_, _) =>
         {
@@ -886,8 +888,8 @@ public partial class MainWindow : Window
     {
         var dialog = new OpenFileDialog
         {
-            Filter = "弦谱项目 (*.xianpu.json;*.json)|*.xianpu.json;*.json|所有文件 (*.*)|*.*",
-            Title = "打开弦谱项目"
+            Filter = "可编辑弦谱文件 (*.xianpu.json;*.json)|*.xianpu.json;*.json|所有文件 (*.*)|*.*",
+            Title = "导入弦谱文件"
         };
         if (dialog.ShowDialog(this) != true) return;
         OpenProjectFile(dialog.FileName);
@@ -900,7 +902,7 @@ public partial class MainWindow : Window
             var song = LibraryStore.LoadSongProject(filePath);
             song.Id = Guid.NewGuid().ToString("N");
             SelectSong(song);
-            SetStatus($"已打开曲谱《{song.Title}》。");
+            SetStatus($"已导入曲谱《{song.Title}》（完整保留歌词、和弦与六线谱），点击「保存」可加入本地曲库。");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
         {
@@ -940,21 +942,30 @@ public partial class MainWindow : Window
         CommitFields();
         var dialog = new SaveFileDialog
         {
-            Filter = "弦谱项目 (*.xianpu.json)|*.xianpu.json|JSON 文件 (*.json)|*.json",
+            Filter = "可编辑弦谱文件 (*.xianpu.json)|*.xianpu.json|JSON 文件 (*.json)|*.json",
             FileName = SafeFileName(_selectedSong.Title) + ".xianpu.json",
             DefaultExt = ".json",
             AddExtension = false,
-            Title = "保存弦谱项目"
+            Title = "导出可编辑曲谱文件"
         };
         if (dialog.ShowDialog(this) != true) return;
+        var targetPath = dialog.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+            ? dialog.FileName
+            : dialog.FileName + ".xianpu.json";
         try
         {
-            LibraryStore.SaveSongProject(_selectedSong, dialog.FileName);
-            SetStatus($"曲谱项目已保存：{Path.GetFileName(dialog.FileName)}");
+            LibraryStore.SaveSongProject(_selectedSong, targetPath);
+            SetStatus($"可编辑曲谱已导出：{Path.GetFileName(targetPath)}（发给好友可导入继续编辑）");
+            AppDialogs.ShowInfo(
+                this,
+                "导出完成",
+                $"可编辑曲谱已导出：\n{targetPath}\n\n将此文件发给使用同款软件的好友，对方点「导入谱子」或直接拖入窗口即可继续编辑。",
+                "打开所在文件夹",
+                () => Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{targetPath}\"") { UseShellExecute = true }));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            AppDialogs.ShowError(this, "保存失败", ex.Message);
+            AppDialogs.ShowError(this, "导出失败", ex.Message);
         }
     }
 
@@ -1144,6 +1155,57 @@ public partial class MainWindow : Window
         var stackedCount = _selectedSong.Lines.Count(l => l.HasStackedLyrics);
         var refCount = _selectedSong.Lines.Count(l => l.IsReferenceLine);
         SetStatus($"已应用段落编排（当前 {_selectedSong.Lines.Count} 行，含 {stackedCount} 句多段叠行、{refCount} 处反复引用）。");
+    }
+
+    private void OpenInsertPartDialog(int afterLineIndex)
+    {
+        if (_selectedSong is null) return;
+        var result = InsertPartDialog.Show(this, _selectedSong, afterLineIndex);
+        if (result is null) return;
+
+        var oldLines = _selectedSong.Lines.ToList();
+        switch (result.Mode)
+        {
+            case InsertPartMode.CloneExisting:
+                PartAnalyzer.InsertClonedPartAfterLine(
+                    _selectedSong.Lines,
+                    afterLineIndex,
+                    result.SourcePartIndex,
+                    result.IncludeChords,
+                    asReferenceLine: false,
+                    customTitle: result.PartTitle);
+                break;
+            case InsertPartMode.ReferenceExisting:
+                PartAnalyzer.InsertClonedPartAfterLine(
+                    _selectedSong.Lines,
+                    afterLineIndex,
+                    result.SourcePartIndex,
+                    includeChords: false,
+                    asReferenceLine: true);
+                break;
+            case InsertPartMode.NewBlank:
+                PartAnalyzer.InsertNewPartAfterLine(
+                    _selectedSong.Lines,
+                    afterLineIndex,
+                    result.PartTitle,
+                    result.NewLyrics);
+                break;
+        }
+
+        PartAnalyzer.RemapTabSections(_selectedSong, oldLines, _selectedSong.Lines);
+        LibraryStore.NormalizeSong(_selectedSong);
+        ScoreSurface.SetSong(_selectedSong);
+        UpdateViewportScale();
+        SaveLibraryQuietly();
+        UpdatePartArrangeButtonCue();
+
+        var modeDesc = result.Mode switch
+        {
+            InsertPartMode.CloneExisting => result.IncludeChords ? "复用段落（含和弦）" : "复用段落歌词",
+            InsertPartMode.ReferenceExisting => "反复引用行",
+            _ => "新段落"
+        };
+        SetStatus($"已在第 {Math.Max(1, afterLineIndex + 1)} 句后插入{modeDesc}。");
     }
 
     private void OpenStackedLyricEditor(int index, bool addNewRow)
@@ -1356,6 +1418,20 @@ public partial class MainWindow : Window
         SaveLibraryQuietly();
     }
 
+    private void CopyLineChords_Click(object sender, RoutedEventArgs e)
+    {
+        if (ScoreSurface.ActiveLineIndex is { } lineIdx)
+            ScoreSurface.CopyLineChords(lineIdx);
+        ScoreSurface.Focus();
+    }
+
+    private void PasteLineChords_Click(object sender, RoutedEventArgs e)
+    {
+        if (ScoreSurface.ActiveLineIndex is { } lineIdx)
+            ScoreSurface.PasteLineChords(lineIdx);
+        ScoreSurface.Focus();
+    }
+
     private void RemoveChord_Click(object sender, RoutedEventArgs e)
     {
         ScoreSurface.RemoveSelectedChord();
@@ -1381,6 +1457,23 @@ public partial class MainWindow : Window
 
     private void UpdateActionStates()
     {
+        if (CopyLineChordsButton is not null)
+            CopyLineChordsButton.IsEnabled = ScoreSurface.SelectedLineHasChords;
+
+        if (PasteLineChordsButton is not null)
+        {
+            var canPaste = ScoreSurface.HasCopiedLineChords &&
+                           ScoreSurface.ActiveLineIndex is { } lineIdx &&
+                           _selectedSong is not null &&
+                           lineIdx >= 0 &&
+                           lineIdx < _selectedSong.Lines.Count &&
+                           !_selectedSong.Lines[lineIdx].IsReferenceLine;
+            PasteLineChordsButton.IsEnabled = canPaste;
+            PasteLineChordsButton.ToolTip = ScoreSurface.HasCopiedLineChords
+                ? $"将已复制的和弦走向（{ScoreSurface.CopiedLineChordsSummary}）粘贴到当前选中句（Ctrl+V）"
+                : "将已复制的和弦走向粘贴到当前选中句（Ctrl+V）";
+        }
+
         if (RemoveChordButton is not null)
             RemoveChordButton.IsEnabled = ScoreSurface.HasSelectedChord;
 

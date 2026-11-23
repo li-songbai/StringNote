@@ -520,6 +520,145 @@ public static class PartAnalyzer
         target.Chords = target.Chords.OrderBy(x => x.Position).ThenBy(x => x.BeforeChar ? 0 : 1).ToList();
     }
 
+    public static void InsertNewPartAfterLine(
+        IList<LyricLine> lines,
+        int afterLineIndex,
+        string partTitle,
+        IReadOnlyList<string> lyricTexts)
+    {
+        var cleaned = lyricTexts
+            .Select(x => (x ?? "").Trim())
+            .Where(x => x.Length > 0)
+            .ToList();
+        if (cleaned.Count == 0) return;
+
+        var parts = BuildParts(lines);
+        var insertAt = lines.Count == 0 ? 0 : Math.Clamp(afterLineIndex + 1, 0, lines.Count);
+        EnsureTailPartSeparated(lines, parts, insertAt);
+
+        var title = string.IsNullOrWhiteSpace(partTitle) ? $"段落 {parts.Count + 1}" : partTitle.Trim();
+        for (var i = 0; i < cleaned.Count; i++)
+        {
+            lines.Insert(insertAt + i, new LyricLine
+            {
+                Text = cleaned[i],
+                PartTitle = i == 0 ? title : "",
+                RepeatCount = 1
+            });
+        }
+    }
+
+    public static void InsertClonedPartAfterLine(
+        IList<LyricLine> lines,
+        int afterLineIndex,
+        int sourcePartIndex,
+        bool includeChords,
+        bool asReferenceLine,
+        string? customTitle = null)
+    {
+        var parts = BuildParts(lines);
+        if (sourcePartIndex < 0 || sourcePartIndex >= parts.Count) return;
+        var srcPart = parts[sourcePartIndex];
+        if (srcPart.IsReference) return;
+
+        var insertAt = lines.Count == 0 ? 0 : Math.Clamp(afterLineIndex + 1, 0, lines.Count);
+        EnsureTailPartSeparated(lines, parts, insertAt);
+
+        if (asReferenceLine)
+        {
+            var refTitle = string.IsNullOrWhiteSpace(srcPart.Title) ? $"段落 {sourcePartIndex + 1}" : srcPart.Title;
+            lines.Insert(insertAt, new LyricLine
+            {
+                Text = $"→ 反复 [{refTitle}]",
+                PartTitle = "",
+                RepeatCount = 1,
+                IsReferenceLine = true
+            });
+            return;
+        }
+
+        var clones = new List<LyricLine>(srcPart.LineCount);
+        for (var i = 0; i < srcPart.LineCount; i++)
+        {
+            var copy = lines[srcPart.StartLine + i].Clone();
+            if (!includeChords)
+                copy.Chords.Clear();
+            clones.Add(copy);
+        }
+        if (clones.Count == 0) return;
+
+        var resolvedTitle = !string.IsNullOrWhiteSpace(customTitle)
+            ? customTitle.Trim()
+            : (string.IsNullOrWhiteSpace(srcPart.Title) || srcPart.Title == "全曲"
+                ? $"段落 {parts.Count + 1}"
+                : srcPart.Title);
+        clones[0].PartTitle = resolvedTitle;
+        clones[0].RepeatCount = Math.Max(1, srcPart.RepeatCount);
+
+        for (var i = 0; i < clones.Count; i++)
+            lines.Insert(insertAt + i, clones[i]);
+    }
+
+    public static void DuplicatePart(IList<LyricLine> lines, int partIndex, bool includeChords = true)
+    {
+        var parts = BuildParts(lines);
+        if (partIndex < 0 || partIndex >= parts.Count) return;
+        var part = parts[partIndex];
+        if (part.IsReference) return;
+        InsertClonedPartAfterLine(lines, part.StartLine + part.LineCount - 1, partIndex, includeChords, asReferenceLine: false);
+    }
+
+    public static void MovePart(IList<LyricLine> lines, int partIndex, int delta)
+    {
+        if (delta is not (-1 or 1)) return;
+        var parts = BuildParts(lines);
+        var targetIndex = partIndex + delta;
+        if (partIndex < 0 || partIndex >= parts.Count || targetIndex < 0 || targetIndex >= parts.Count)
+            return;
+
+        var firstIdx = Math.Min(partIndex, targetIndex);
+        var secondIdx = Math.Max(partIndex, targetIndex);
+        var partA = parts[firstIdx];
+        var partB = parts[secondIdx];
+
+        if (!partA.IsReference && string.IsNullOrWhiteSpace(lines[partA.StartLine].PartTitle))
+            lines[partA.StartLine].PartTitle = partA.Title == "全曲" ? "段落 1" : partA.Title;
+        if (!partB.IsReference && string.IsNullOrWhiteSpace(lines[partB.StartLine].PartTitle))
+            lines[partB.StartLine].PartTitle = partB.Title == "全曲" ? "段落 2" : partB.Title;
+
+        var blockA = new List<LyricLine>(partA.LineCount);
+        for (var i = 0; i < partA.LineCount; i++)
+            blockA.Add(lines[partA.StartLine + i]);
+
+        var blockB = new List<LyricLine>(partB.LineCount);
+        for (var i = 0; i < partB.LineCount; i++)
+            blockB.Add(lines[partB.StartLine + i]);
+
+        var totalRemove = partA.LineCount + partB.LineCount;
+        for (var i = 0; i < totalRemove; i++)
+            lines.RemoveAt(partA.StartLine);
+
+        var insertPos = partA.StartLine;
+        foreach (var line in blockB)
+            lines.Insert(insertPos++, line);
+        foreach (var line in blockA)
+            lines.Insert(insertPos++, line);
+    }
+
+    private static void EnsureTailPartSeparated(IList<LyricLine> lines, IReadOnlyList<PartBlock> parts, int insertAt)
+    {
+        if (insertAt <= 0 || insertAt >= lines.Count) return;
+        var tailLine = lines[insertAt];
+        if (tailLine.IsReferenceLine || lines[insertAt - 1].IsReferenceLine) return;
+        if (!string.IsNullOrWhiteSpace(tailLine.PartTitle)) return;
+
+        var enclosing = parts.FirstOrDefault(p => insertAt >= p.StartLine && insertAt < p.StartLine + p.LineCount);
+        var baseName = enclosing is null || string.IsNullOrWhiteSpace(enclosing.Title) || enclosing.Title == "全曲"
+            ? "段落"
+            : enclosing.Title;
+        tailLine.PartTitle = $"{baseName} (续)";
+    }
+
     public static void RemapTabSections(SongModel song, IReadOnlyList<LyricLine> oldLines, IReadOnlyList<LyricLine> newLines)
     {
         if (song.TabSections is null || song.TabSections.Count == 0) return;

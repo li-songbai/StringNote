@@ -1,9 +1,13 @@
+using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using Microsoft.Win32;
 
 namespace Xianpu.Desktop;
 
@@ -31,8 +35,8 @@ internal static class TabEditorWindow
             working.Bars.Add(new TabBar { ColumnCount = working.ColumnsPerBar });
 
         var workArea = SystemParameters.WorkArea;
-        var winWidth = Math.Max(640, Math.Min(920, workArea.Width * 0.90));
-        var winHeight = Math.Max(460, Math.Min(650, workArea.Height * 0.88));
+        var winWidth = Math.Max(640, Math.Min(980, workArea.Width * 0.92));
+        var winHeight = Math.Max(460, Math.Min(690, workArea.Height * 0.90));
 
         var window = AppDialogs.CreateCardWindow(
             owner,
@@ -132,26 +136,90 @@ internal static class TabEditorWindow
         var addBarBtn = MakeSmallBtn(owner, "+ 添加小节");
         var removeBarBtn = MakeSmallBtn(owner, "- 删除末小节");
         var clearBarBtn = MakeSmallBtn(owner, "清空当前小节");
+        var insertSlotBtn = MakeSmallBtn(owner, "插拍 →");
+        var deleteSlotBtn = MakeSmallBtn(owner, "删拍 ←");
+        var undoBtn = MakeSmallBtn(owner, "撤销");
+        undoBtn.IsEnabled = false;
+        var copyBarBtn = MakeSmallBtn(owner, "复制小节");
+        var pasteBarBtn = MakeSmallBtn(owner, "粘贴小节");
+        pasteBarBtn.IsEnabled = false;
+        var dupBarBtn = MakeSmallBtn(owner, "复制并追加");
+
+        var repeatStartToggle = new ToggleButton
+        {
+            Content = "||: 起",
+            Padding = new Thickness(7, 3, 7, 3),
+            Margin = new Thickness(0, 2, 4, 2),
+            FontSize = 11.5,
+            Cursor = Cursors.Hand,
+            ToolTip = "在当前小节左侧添加反复记号起点 ||:"
+        };
+        var repeatEndToggle = new ToggleButton
+        {
+            Content = ":|| 止",
+            Padding = new Thickness(7, 3, 7, 3),
+            Margin = new Thickness(0, 2, 6, 2),
+            FontSize = 11.5,
+            Cursor = Cursors.Hand,
+            ToolTip = "在当前小节右侧添加反复记号终点 :||"
+        };
+        var showRhythmCheck = new CheckBox
+        {
+            Content = "时值符干",
+            IsChecked = working.ShowRhythmStems,
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(2, 2, 8, 2),
+            ToolTip = "在六线谱下方绘制节奏时值符干与连音横杠"
+        };
+
         var pattern44Btn = MakeSmallBtn(owner, "模板 53231323");
         var pattern34Btn = MakeSmallBtn(owner, "模板 532123");
+        var strumPatternBtn = MakeSmallBtn(owner, "模板 扫弦 ↓↑");
         var importAsciiBtn = MakeSmallBtn(owner, "导入文本谱...");
+        var importTabBtn = MakeSmallBtn(owner, "导入片段...");
+        var exportTabBtn = MakeSmallBtn(owner, "导出片段...");
 
+        insertSlotBtn.ToolTip = "在当前拍位插入 1 个空拍，当前拍及后续所有音符跨小节自动后移 (Insert)";
+        deleteSlotBtn.ToolTip = "删除当前拍位，后续所有音符跨小节自动前移 1 格 (Shift+Delete / Ctrl+Backspace)";
+        undoBtn.ToolTip = "撤销上一步六线谱编辑 (Ctrl+Z)";
+        copyBarBtn.ToolTip = "复制当前小节全部音符、时值、扫弦与和弦标注 (Ctrl+C)";
+        pasteBarBtn.ToolTip = "将已复制的小节内容粘贴覆盖到当前小节 (Ctrl+V)";
+        dupBarBtn.ToolTip = "复制当前小节并直接追加到下一小节 (Ctrl+D)";
         pattern44Btn.ToolTip = "向当前小节填入常用 4/4 分解拨弦示意（可在各格修改品数）";
         pattern34Btn.ToolTip = "向当前小节填入常用 3/4 分解拨弦示意";
+        strumPatternBtn.ToolTip = "向当前小节填入常用 4/4 扫弦节奏型（↓ ↓↑ ↑↓↑）";
         importAsciiBtn.ToolTip = "粘贴标准 6 行 ASCII 文本六线谱（如 e|---0---|），自动解析为小节";
+        importTabBtn.ToolTip = "导入好友分享的 .xianputab.json 六线谱片段";
+        exportTabBtn.ToolTip = "将当前六线谱导出为 .xianputab.json 文件，发给好友可直接导入编辑";
 
         barToolbar.Children.Add(addBarBtn);
         barToolbar.Children.Add(removeBarBtn);
         barToolbar.Children.Add(clearBarBtn);
-        barToolbar.Children.Add(new Border { Width = 1, Height = 18, Background = AppDialogs.SubtleBorderBrush, Margin = new Thickness(4, 0, 8, 0) });
+        barToolbar.Children.Add(new Border { Width = 1, Height = 18, Background = AppDialogs.SubtleBorderBrush, Margin = new Thickness(3, 2, 7, 2) });
+        barToolbar.Children.Add(insertSlotBtn);
+        barToolbar.Children.Add(deleteSlotBtn);
+        barToolbar.Children.Add(undoBtn);
+        barToolbar.Children.Add(new Border { Width = 1, Height = 18, Background = AppDialogs.SubtleBorderBrush, Margin = new Thickness(3, 2, 7, 2) });
+        barToolbar.Children.Add(copyBarBtn);
+        barToolbar.Children.Add(pasteBarBtn);
+        barToolbar.Children.Add(dupBarBtn);
+        barToolbar.Children.Add(new Border { Width = 1, Height = 18, Background = AppDialogs.SubtleBorderBrush, Margin = new Thickness(3, 2, 7, 2) });
+        barToolbar.Children.Add(repeatStartToggle);
+        barToolbar.Children.Add(repeatEndToggle);
+        barToolbar.Children.Add(showRhythmCheck);
+        barToolbar.Children.Add(new Border { Width = 1, Height = 18, Background = AppDialogs.SubtleBorderBrush, Margin = new Thickness(0, 2, 7, 2) });
         barToolbar.Children.Add(pattern44Btn);
         barToolbar.Children.Add(pattern34Btn);
+        barToolbar.Children.Add(strumPatternBtn);
         barToolbar.Children.Add(importAsciiBtn);
+        barToolbar.Children.Add(importTabBtn);
+        barToolbar.Children.Add(exportTabBtn);
 
         Grid.SetRow(barToolbar, 1);
         root.Children.Add(barToolbar);
 
-        // ─── Row 2: Active Cell Info + Chord Mark + Quick Keypad ──────────────────────
+        // ─── Row 2: Active Cell Info + Chord Mark + Quick Keypad + Rhythm/Technique ──
         var cellBar = new Border
         {
             Background = AppDialogs.SubtleSurfaceBrush,
@@ -161,7 +229,8 @@ internal static class TabEditorWindow
             Padding = new Thickness(10, 7, 10, 7),
             Margin = new Thickness(0, 0, 0, 8)
         };
-        var cellWrap = new WrapPanel { VerticalAlignment = VerticalAlignment.Center };
+        var cellStack = new StackPanel();
+        var cellWrap = new WrapPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 0, 5) };
 
         var activeCellLabel = new TextBlock
         {
@@ -189,7 +258,7 @@ internal static class TabEditorWindow
         var keypadLabel = MakeCaption("快捷填入");
         cellWrap.Children.Add(keypadLabel);
 
-        var keypadTokens = new[] { "0", "1", "2", "3", "4", "5", "7", "9", "12", "x", "h", "p", "/", "~" };
+        var keypadTokens = new[] { "0", "1", "2", "3", "4", "5", "7", "9", "12", "x", "s", "h", "p", "b", "~", "NH" };
         var keypadButtons = new List<Button>();
         foreach (var tok in keypadTokens)
         {
@@ -214,7 +283,117 @@ internal static class TabEditorWindow
         clearCellBtn.Margin = new Thickness(3, 2, 0, 2);
         cellWrap.Children.Add(clearCellBtn);
 
-        cellBar.Child = cellWrap;
+        var exprWrap = new WrapPanel { VerticalAlignment = VerticalAlignment.Center };
+        exprWrap.Children.Add(MakeCaption("时值"));
+        var durationBox = new ComboBox { Width = 84, Margin = new Thickness(0, 2, 8, 2), FontSize = 11.5, ToolTip = "设置当前拍位时值（默认按前后空隙自动推导）" };
+        durationBox.Items.Add(new ComboBoxItem { Content = "自动", Tag = TabDuration.Auto });
+        durationBox.Items.Add(new ComboBoxItem { Content = "全音符", Tag = TabDuration.Whole });
+        durationBox.Items.Add(new ComboBoxItem { Content = "二分", Tag = TabDuration.Half });
+        durationBox.Items.Add(new ComboBoxItem { Content = "四分", Tag = TabDuration.Quarter });
+        durationBox.Items.Add(new ComboBoxItem { Content = "八分", Tag = TabDuration.Eighth });
+        durationBox.Items.Add(new ComboBoxItem { Content = "十六分", Tag = TabDuration.Sixteenth });
+        exprWrap.Children.Add(durationBox);
+
+        var dottedToggle = new ToggleButton
+        {
+            Content = "附点 .",
+            Padding = new Thickness(7, 2, 7, 2),
+            Margin = new Thickness(0, 2, 6, 2),
+            FontSize = 11.5,
+            Cursor = Cursors.Hand,
+            ToolTip = "为当前拍位添加附点"
+        };
+        exprWrap.Children.Add(dottedToggle);
+
+        var restToggle = new ToggleButton
+        {
+            Content = "休止",
+            Padding = new Thickness(7, 2, 7, 2),
+            Margin = new Thickness(0, 2, 12, 2),
+            FontSize = 11.5,
+            Cursor = Cursors.Hand,
+            ToolTip = "将当前拍位标为休止符"
+        };
+        exprWrap.Children.Add(restToggle);
+
+        exprWrap.Children.Add(MakeCaption("扫弦/琶音"));
+        var strumBox = new ComboBox { Width = 104, Margin = new Thickness(0, 2, 12, 2), FontSize = 11.5, ToolTip = "设置当前拍位的整列扫弦箭头、切音或琶音符号" };
+        strumBox.Items.Add(new ComboBoxItem { Content = "无", Tag = TabStrumKind.None });
+        strumBox.Items.Add(new ComboBoxItem { Content = "下扫 (6→1)", Tag = TabStrumKind.Down });
+        strumBox.Items.Add(new ComboBoxItem { Content = "上扫 (1→6)", Tag = TabStrumKind.Up });
+        strumBox.Items.Add(new ComboBoxItem { Content = "切音 ×", Tag = TabStrumKind.Mute });
+        strumBox.Items.Add(new ComboBoxItem { Content = "琶音 ⌇", Tag = TabStrumKind.Arpeggio });
+        exprWrap.Children.Add(strumBox);
+
+        var palmMuteToggle = new ToggleButton
+        {
+            Content = "P.M. 闷音",
+            Padding = new Thickness(7, 2, 7, 2),
+            Margin = new Thickness(0, 2, 12, 2),
+            FontSize = 11.5,
+            Cursor = Cursors.Hand,
+            ToolTip = "标记当前拍位为右手闷音 (快捷键 m)，连续多拍自动画 P.M. 虚线"
+        };
+        exprWrap.Children.Add(palmMuteToggle);
+
+        exprWrap.Children.Add(MakeCaption("连音(→下音)"));
+        var linkBox = new ComboBox { Width = 92, Margin = new Thickness(0, 2, 10, 2), FontSize = 11.5, ToolTip = "连接当前格音符与同弦下一个音符（画连音弧线或滑音斜线）" };
+        linkBox.Items.Add(new ComboBoxItem { Content = "无", Tag = TabLinkKind.None });
+        linkBox.Items.Add(new ComboBoxItem { Content = "击弦 H", Tag = TabLinkKind.HammerOn });
+        linkBox.Items.Add(new ComboBoxItem { Content = "勾弦 P", Tag = TabLinkKind.PullOff });
+        linkBox.Items.Add(new ComboBoxItem { Content = "滑音 S", Tag = TabLinkKind.Slide });
+        linkBox.Items.Add(new ComboBoxItem { Content = "延音线 ⌒", Tag = TabLinkKind.Tie });
+        exprWrap.Children.Add(linkBox);
+
+        exprWrap.Children.Add(MakeCaption("倚音(不占拍)"));
+        var graceFretBox = new TextBox
+        {
+            Width = 38,
+            FontSize = 12,
+            FontWeight = FontWeights.Bold,
+            Padding = new Thickness(5, 2, 5, 2),
+            Margin = new Thickness(0, 2, 4, 2),
+            ToolTip = "不占拍子的前置装饰音品位（例：主音填 7、倚音填 5 即为 5s7 滑音，5 不占时值；也可在格内直接连按 5 s 7）"
+        };
+        exprWrap.Children.Add(graceFretBox);
+
+        var graceLinkBox = new ComboBox
+        {
+            Width = 80,
+            Margin = new Thickness(0, 2, 10, 2),
+            FontSize = 11.5,
+            ToolTip = "倚音连到主音的技巧符号"
+        };
+        graceLinkBox.Items.Add(new ComboBoxItem { Content = "滑入 S", Tag = TabLinkKind.Slide });
+        graceLinkBox.Items.Add(new ComboBoxItem { Content = "击入 H", Tag = TabLinkKind.HammerOn });
+        graceLinkBox.Items.Add(new ComboBoxItem { Content = "勾入 P", Tag = TabLinkKind.PullOff });
+        graceLinkBox.Items.Add(new ComboBoxItem { Content = "连线 ⌒", Tag = TabLinkKind.Tie });
+        exprWrap.Children.Add(graceLinkBox);
+
+        exprWrap.Children.Add(MakeCaption("单音技巧"));
+        var techniqueBox = new ComboBox
+        {
+            Width = 146,
+            Margin = new Thickness(0, 2, 0, 2),
+            FontSize = 11.5,
+            ToolTip = "为当前选中音符添加推弦、泛音、揉弦、轻音或单向滑音技巧"
+        };
+        techniqueBox.Items.Add(new ComboBoxItem { Content = "无", Tag = TabNoteTechnique.None });
+        techniqueBox.Items.Add(new ComboBoxItem { Content = "全音推弦 (Full)", Tag = TabNoteTechnique.BendFull });
+        techniqueBox.Items.Add(new ComboBoxItem { Content = "半音推弦 (½)", Tag = TabNoteTechnique.BendHalf });
+        techniqueBox.Items.Add(new ComboBoxItem { Content = "全音推弦回放 (Full ↑↓)", Tag = TabNoteTechnique.BendRelease });
+        techniqueBox.Items.Add(new ComboBoxItem { Content = "半音推弦回放 (½ ↑↓)", Tag = TabNoteTechnique.BendHalfRelease });
+        techniqueBox.Items.Add(new ComboBoxItem { Content = "揉弦 (~~~)", Tag = TabNoteTechnique.Vibrato });
+        techniqueBox.Items.Add(new ComboBoxItem { Content = "自然泛音 (N.H.)", Tag = TabNoteTechnique.NaturalHarmonic });
+        techniqueBox.Items.Add(new ComboBoxItem { Content = "人工泛音 (A.H.)", Tag = TabNoteTechnique.ArtificialHarmonic });
+        techniqueBox.Items.Add(new ComboBoxItem { Content = "轻音括号 ((n))", Tag = TabNoteTechnique.GhostNote });
+        techniqueBox.Items.Add(new ComboBoxItem { Content = "无起点滑入 (/n)", Tag = TabNoteTechnique.SlideIn });
+        techniqueBox.Items.Add(new ComboBoxItem { Content = "无终点滑出 (n\\)", Tag = TabNoteTechnique.SlideOut });
+        exprWrap.Children.Add(techniqueBox);
+
+        cellStack.Children.Add(cellWrap);
+        cellStack.Children.Add(exprWrap);
+        cellBar.Child = cellStack;
         Grid.SetRow(cellBar, 2);
         root.Children.Add(cellBar);
 
@@ -244,7 +423,7 @@ internal static class TabEditorWindow
         var footer = new DockPanel { Margin = new Thickness(0, 12, 0, 0), LastChildFill = false };
         var helpText = new TextBlock
         {
-            Text = "操作提示：点击任意弦位，直接按键盘 0-9 / x 输入品数，方向键 ↑↓←→ 移动，Delete 擦除，Tab 下一格。",
+            Text = "提示：0-9/x 填谱，5 s 7 倚音滑音，b 推弦，n 泛音，~/v 揉弦，Insert 插拍，Shift+Del 删拍前移，Ctrl+Z 撤销，Ctrl+C/V/D 复制小节。",
             FontSize = 11.5,
             Foreground = AppDialogs.MutedBrush,
             VerticalAlignment = VerticalAlignment.Center,
@@ -305,6 +484,53 @@ internal static class TabEditorWindow
             insertAfterBox.Visibility = isInterlude ? Visibility.Visible : Visibility.Collapsed;
         }
 
+        TabBar? copiedBar = null;
+        var undoHistory = new List<List<TabBar>>();
+
+        void PushUndo()
+        {
+            if (undoHistory.Count >= 50)
+                undoHistory.RemoveAt(0);
+            undoHistory.Add(working.Bars.Select(b => b.Clone()).ToList());
+            undoBtn.IsEnabled = true;
+        }
+
+        void PerformUndo()
+        {
+            if (undoHistory.Count == 0) return;
+            var snapshot = undoHistory[^1];
+            undoHistory.RemoveAt(undoHistory.Count - 1);
+            working.Bars.Clear();
+            working.Bars.AddRange(snapshot);
+            if (working.Bars.Count == 0)
+                working.Bars.Add(new TabBar { ColumnCount = working.ColumnsPerBar });
+            undoBtn.IsEnabled = undoHistory.Count > 0;
+            canvas.ClampCursor();
+            canvas.RebuildLayout();
+            SyncCellHeader();
+        }
+
+        void InsertSlotRipple()
+        {
+            var (bIdx, cIdx, _) = canvas.ActiveCell;
+            if (bIdx < 0 || bIdx >= working.Bars.Count) return;
+            PushUndo();
+            RippleInsertSlot(working, bIdx, cIdx);
+            canvas.ClampCursor();
+            canvas.RebuildLayout();
+            SyncCellHeader();
+        }
+
+        void DeleteSlotRipple()
+        {
+            var (bIdx, cIdx, _) = canvas.ActiveCell;
+            if (bIdx < 0 || bIdx >= working.Bars.Count) return;
+            PushUndo();
+            RippleDeleteSlot(working, bIdx, cIdx);
+            canvas.InvalidateVisual();
+            SyncCellHeader();
+        }
+
         void SyncCellHeader()
         {
             syncing = true;
@@ -314,6 +540,34 @@ internal static class TabEditorWindow
                 activeCellLabel.Text = $"第 {bIdx + 1} 小节 · 第 {cIdx + 1} 格 · {StringNames[sIdx]}";
                 chordMarkBox.Text = canvas.GetChordMark(bIdx, cIdx) ?? "";
                 removeBarBtn.IsEnabled = working.Bars.Count > 1;
+
+                if (bIdx >= 0 && bIdx < working.Bars.Count)
+                {
+                    var curBar = working.Bars[bIdx];
+                    repeatStartToggle.IsChecked = curBar.RepeatStart;
+                    repeatEndToggle.IsChecked = curBar.RepeatEnd;
+                }
+
+                var colMeta = canvas.GetColumnMeta(bIdx, cIdx);
+                SelectComboByTag(durationBox, colMeta?.Duration ?? TabDuration.Auto);
+                dottedToggle.IsChecked = colMeta?.Dotted == true;
+                restToggle.IsChecked = colMeta?.IsRest == true;
+                SelectComboByTag(strumBox, colMeta?.Strum ?? TabStrumKind.None);
+                palmMuteToggle.IsChecked = colMeta?.PalmMute == true;
+
+                var activeNote = canvas.GetActiveNote();
+                linkBox.IsEnabled = activeNote is not null;
+                SelectComboByTag(linkBox, activeNote?.LinkToNext ?? TabLinkKind.None);
+
+                graceFretBox.IsEnabled = activeNote is not null;
+                graceFretBox.Text = activeNote?.GraceFret ?? "";
+                graceLinkBox.IsEnabled = activeNote is not null && !string.IsNullOrWhiteSpace(activeNote.GraceFret);
+                SelectComboByTag(
+                    graceLinkBox,
+                    activeNote is { GraceLink: not TabLinkKind.None } ? activeNote.GraceLink : TabLinkKind.Slide);
+
+                techniqueBox.IsEnabled = activeNote is not null;
+                SelectComboByTag(techniqueBox, activeNote?.Technique ?? TabNoteTechnique.None);
             }
             finally
             {
@@ -321,10 +575,51 @@ internal static class TabEditorWindow
             }
         }
 
+        void CopyCurrentBar()
+        {
+            var (bIdx, _, _) = canvas.ActiveCell;
+            if (bIdx < 0 || bIdx >= working.Bars.Count) return;
+            copiedBar = working.Bars[bIdx].Clone();
+            pasteBarBtn.IsEnabled = true;
+            pasteBarBtn.ToolTip = $"将已复制的第 {bIdx + 1} 小节内容粘贴覆盖到当前小节 (Ctrl+V)";
+        }
+
+        void PasteToCurrentBar()
+        {
+            if (copiedBar is null) return;
+            var (bIdx, _, sIdx) = canvas.ActiveCell;
+            if (bIdx < 0 || bIdx >= working.Bars.Count) return;
+            PushUndo();
+            var target = working.Bars[bIdx];
+            ApplyCopiedBarToTarget(copiedBar, target);
+            canvas.SelectCell(bIdx, 0, sIdx);
+            canvas.InvalidateVisual();
+            SyncCellHeader();
+        }
+
+        void DuplicateCurrentBar()
+        {
+            var (bIdx, _, sIdx) = canvas.ActiveCell;
+            if (bIdx < 0 || bIdx >= working.Bars.Count) return;
+            PushUndo();
+            var clone = working.Bars[bIdx].Clone();
+            working.Bars.Insert(bIdx + 1, clone);
+            canvas.SelectCell(bIdx + 1, 0, sIdx);
+            canvas.RebuildLayout();
+            SyncCellHeader();
+        }
+
         SyncInsertVisibility();
         SyncCellHeader();
 
         canvas.SelectionChanged += SyncCellHeader;
+        canvas.BeforeEdit += PushUndo;
+        canvas.CopyBarRequested += CopyCurrentBar;
+        canvas.PasteBarRequested += PasteToCurrentBar;
+        canvas.DuplicateBarRequested += DuplicateCurrentBar;
+        canvas.InsertSlotRequested += InsertSlotRipple;
+        canvas.DeleteSlotRequested += DeleteSlotRipple;
+        canvas.UndoRequested += PerformUndo;
 
         kindBox.SelectionChanged += (_, _) =>
         {
@@ -364,13 +659,15 @@ internal static class TabEditorWindow
 
         colsBox.SelectionChanged += (_, _) =>
         {
-            if (colsBox.SelectedItem is not int count) return;
+            if (syncing || colsBox.SelectedItem is not int count) return;
+            PushUndo();
             working.ColumnsPerBar = count;
             foreach (var bar in working.Bars)
             {
                 bar.ColumnCount = count;
                 bar.Notes.RemoveAll(n => n.Column >= count);
                 bar.ChordMarks.RemoveAll(m => m.Column >= count);
+                bar.ColumnMetas.RemoveAll(m => m.Column >= count);
             }
             canvas.ClampCursor();
             canvas.RebuildLayout();
@@ -423,6 +720,7 @@ internal static class TabEditorWindow
         removeBarBtn.Click += (_, _) =>
         {
             if (working.Bars.Count <= 1) return;
+            PushUndo();
             working.Bars.RemoveAt(working.Bars.Count - 1);
             canvas.ClampCursor();
             canvas.RebuildLayout();
@@ -435,27 +733,131 @@ internal static class TabEditorWindow
             var (bIdx, _, _) = canvas.ActiveCell;
             if (bIdx >= 0 && bIdx < working.Bars.Count)
             {
+                PushUndo();
                 working.Bars[bIdx].Notes.Clear();
                 working.Bars[bIdx].ChordMarks.Clear();
+                working.Bars[bIdx].ColumnMetas.Clear();
+                working.Bars[bIdx].RepeatStart = false;
+                working.Bars[bIdx].RepeatEnd = false;
                 canvas.InvalidateVisual();
                 SyncCellHeader();
             }
             canvas.Focus();
         };
 
+        insertSlotBtn.Click += (_, _) => { InsertSlotRipple(); canvas.Focus(); };
+        deleteSlotBtn.Click += (_, _) => { DeleteSlotRipple(); canvas.Focus(); };
+        undoBtn.Click += (_, _) => { PerformUndo(); canvas.Focus(); };
+        copyBarBtn.Click += (_, _) => { CopyCurrentBar(); canvas.Focus(); };
+        pasteBarBtn.Click += (_, _) => { PasteToCurrentBar(); canvas.Focus(); };
+        dupBarBtn.Click += (_, _) => { DuplicateCurrentBar(); canvas.Focus(); };
+
+        void UpdateCurrentBarRepeat()
+        {
+            if (syncing) return;
+            var (bIdx, _, _) = canvas.ActiveCell;
+            if (bIdx < 0 || bIdx >= working.Bars.Count) return;
+            PushUndo();
+            working.Bars[bIdx].RepeatStart = repeatStartToggle.IsChecked == true;
+            working.Bars[bIdx].RepeatEnd = repeatEndToggle.IsChecked == true;
+            canvas.InvalidateVisual();
+            canvas.Focus();
+        }
+        repeatStartToggle.Checked += (_, _) => UpdateCurrentBarRepeat();
+        repeatStartToggle.Unchecked += (_, _) => UpdateCurrentBarRepeat();
+        repeatEndToggle.Checked += (_, _) => UpdateCurrentBarRepeat();
+        repeatEndToggle.Unchecked += (_, _) => UpdateCurrentBarRepeat();
+
+        showRhythmCheck.Checked += (_, _) => { if (!syncing) { working.ShowRhythmStems = true; canvas.InvalidateVisual(); canvas.Focus(); } };
+        showRhythmCheck.Unchecked += (_, _) => { if (!syncing) { working.ShowRhythmStems = false; canvas.InvalidateVisual(); canvas.Focus(); } };
+
+        durationBox.SelectionChanged += (_, _) =>
+        {
+            if (syncing || durationBox.SelectedItem is not ComboBoxItem { Tag: TabDuration dur }) return;
+            var (bIdx, cIdx, _) = canvas.ActiveCell;
+            canvas.UpdateColumnMeta(bIdx, cIdx, m => m.Duration = dur);
+            canvas.Focus();
+        };
+        dottedToggle.Checked += (_, _) => { if (!syncing) { var (b, c, _) = canvas.ActiveCell; canvas.UpdateColumnMeta(b, c, m => m.Dotted = true); canvas.Focus(); } };
+        dottedToggle.Unchecked += (_, _) => { if (!syncing) { var (b, c, _) = canvas.ActiveCell; canvas.UpdateColumnMeta(b, c, m => m.Dotted = false); canvas.Focus(); } };
+        restToggle.Checked += (_, _) => { if (!syncing) { var (b, c, _) = canvas.ActiveCell; canvas.UpdateColumnMeta(b, c, m => m.IsRest = true); canvas.Focus(); } };
+        restToggle.Unchecked += (_, _) => { if (!syncing) { var (b, c, _) = canvas.ActiveCell; canvas.UpdateColumnMeta(b, c, m => m.IsRest = false); canvas.Focus(); } };
+        strumBox.SelectionChanged += (_, _) =>
+        {
+            if (syncing || strumBox.SelectedItem is not ComboBoxItem { Tag: TabStrumKind strum }) return;
+            var (bIdx, cIdx, _) = canvas.ActiveCell;
+            canvas.UpdateColumnMeta(bIdx, cIdx, m => m.Strum = strum);
+            canvas.Focus();
+        };
+        palmMuteToggle.Checked += (_, _) => { if (!syncing) { var (b, c, _) = canvas.ActiveCell; canvas.UpdateColumnMeta(b, c, m => m.PalmMute = true); canvas.Focus(); } };
+        palmMuteToggle.Unchecked += (_, _) => { if (!syncing) { var (b, c, _) = canvas.ActiveCell; canvas.UpdateColumnMeta(b, c, m => m.PalmMute = false); canvas.Focus(); } };
+        linkBox.SelectionChanged += (_, _) =>
+        {
+            if (syncing || linkBox.SelectedItem is not ComboBoxItem { Tag: TabLinkKind link }) return;
+            canvas.SetActiveNoteLink(link);
+            canvas.Focus();
+        };
+
+        graceFretBox.TextChanged += (_, _) =>
+        {
+            if (syncing) return;
+            var text = graceFretBox.Text.Trim();
+            TabLinkKind? desiredLink = !string.IsNullOrEmpty(text) && graceLinkBox.SelectedItem is ComboBoxItem { Tag: TabLinkKind l }
+                ? l
+                : null;
+            canvas.SetActiveNoteGrace(text, desiredLink);
+            graceLinkBox.IsEnabled = canvas.GetActiveNote() is not null && !string.IsNullOrEmpty(text);
+        };
+        graceFretBox.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key is Key.Enter or Key.Escape)
+            {
+                canvas.Focus();
+                e.Handled = true;
+            }
+        };
+        graceLinkBox.SelectionChanged += (_, _) =>
+        {
+            if (syncing || graceLinkBox.SelectedItem is not ComboBoxItem { Tag: TabLinkKind link }) return;
+            var activeNote = canvas.GetActiveNote();
+            if (activeNote is null || string.IsNullOrWhiteSpace(activeNote.GraceFret)) return;
+            canvas.SetActiveNoteGrace(activeNote.GraceFret, link);
+            canvas.Focus();
+        };
+        techniqueBox.SelectionChanged += (_, _) =>
+        {
+            if (syncing || techniqueBox.SelectedItem is not ComboBoxItem { Tag: TabNoteTechnique tech }) return;
+            canvas.SetActiveNoteTechnique(tech);
+            canvas.Focus();
+        };
+
         pattern44Btn.Click += (_, _) =>
         {
             var (bIdx, _, _) = canvas.ActiveCell;
+            PushUndo();
             ApplyArpeggioPattern(working.Bars[bIdx], [5, 3, 2, 3, 1, 3, 2, 3]);
             canvas.InvalidateVisual();
+            SyncCellHeader();
             canvas.Focus();
         };
 
         pattern34Btn.Click += (_, _) =>
         {
             var (bIdx, _, _) = canvas.ActiveCell;
+            PushUndo();
             ApplyArpeggioPattern(working.Bars[bIdx], [5, 3, 2, 1, 2, 3]);
             canvas.InvalidateVisual();
+            SyncCellHeader();
+            canvas.Focus();
+        };
+
+        strumPatternBtn.Click += (_, _) =>
+        {
+            var (bIdx, _, _) = canvas.ActiveCell;
+            PushUndo();
+            ApplyStrumPattern(working.Bars[bIdx]);
+            canvas.InvalidateVisual();
+            SyncCellHeader();
             canvas.Focus();
         };
 
@@ -476,12 +878,96 @@ internal static class TabEditorWindow
                 AppDialogs.ShowInfo(window, "未识别到文本六线谱", "请确认输入包含 6 行以 | 分隔的弦谱内容。");
                 return;
             }
+            PushUndo();
             working.Bars.Clear();
             working.Bars.AddRange(parsedBars);
             canvas.SelectCell(0, 0, 0);
             canvas.RebuildLayout();
             SyncCellHeader();
             canvas.Focus();
+        };
+
+        importTabBtn.Click += (_, _) =>
+        {
+            var dialog = new OpenFileDialog
+            {
+                Filter = "弦谱六线谱片段 (*.xianputab.json;*.json)|*.xianputab.json;*.json|所有文件 (*.*)|*.*",
+                Title = "导入六线谱片段"
+            };
+            if (dialog.ShowDialog(window) != true) return;
+            try
+            {
+                var imported = LibraryStore.LoadTabSection(dialog.FileName);
+                PushUndo();
+                working.TimeSignature = imported.TimeSignature;
+                working.ColumnsPerBar = imported.ColumnsPerBar;
+                working.ShowRhythmStems = imported.ShowRhythmStems;
+                working.Bars.Clear();
+                working.Bars.AddRange(imported.Bars);
+                if (working.Bars.Count == 0)
+                    working.Bars.Add(new TabBar { ColumnCount = working.ColumnsPerBar });
+
+                syncing = true;
+                try
+                {
+                    timeSigBox.Text = working.TimeSignature;
+                    if (ColumnOptions.Contains(working.ColumnsPerBar))
+                        colsBox.SelectedItem = working.ColumnsPerBar;
+                    showRhythmCheck.IsChecked = working.ShowRhythmStems;
+                }
+                finally
+                {
+                    syncing = false;
+                }
+
+                canvas.SelectCell(0, 0, 0);
+                canvas.RebuildLayout();
+                SyncCellHeader();
+                canvas.Focus();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
+            {
+                AppDialogs.ShowError(window, "导入片段失败", ex.Message);
+            }
+        };
+
+        exportTabBtn.Click += (_, _) =>
+        {
+            var baseName = string.IsNullOrWhiteSpace(titleBox.Text) ? working.Title : titleBox.Text.Trim();
+            foreach (var invalid in Path.GetInvalidFileNameChars())
+                baseName = baseName.Replace(invalid, '_');
+            if (string.IsNullOrWhiteSpace(baseName)) baseName = "六线谱片段";
+
+            var dialog = new SaveFileDialog
+            {
+                Filter = "弦谱六线谱片段 (*.xianputab.json)|*.xianputab.json|JSON 文件 (*.json)|*.json",
+                FileName = baseName + ".xianputab.json",
+                DefaultExt = ".json",
+                AddExtension = false,
+                Title = "导出六线谱片段"
+            };
+            if (dialog.ShowDialog(window) != true) return;
+            var targetPath = dialog.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+                ? dialog.FileName
+                : dialog.FileName + ".xianputab.json";
+
+            try
+            {
+                var snapshot = working.Clone();
+                snapshot.Title = string.IsNullOrWhiteSpace(titleBox.Text) ? working.Title : titleBox.Text.Trim();
+                snapshot.TimeSignature = string.IsNullOrWhiteSpace(timeSigBox.Text) ? "4/4" : timeSigBox.Text.Trim();
+                LibraryStore.SaveTabSection(snapshot, targetPath);
+                AppDialogs.ShowInfo(
+                    window,
+                    "导出完成",
+                    $"六线谱片段已导出：\n{targetPath}\n\n发送给使用同款软件的好友，对方在六线谱编辑器中点「导入片段...」即可载入编辑。",
+                    "打开所在文件夹",
+                    () => Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{targetPath}\"") { UseShellExecute = true }));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                AppDialogs.ShowError(window, "导出失败", ex.Message);
+            }
         };
 
         window.Loaded += (_, _) => canvas.Focus();
@@ -568,6 +1054,89 @@ internal static class TabEditorWindow
         return btn;
     }
 
+    private static void SelectComboByTag<T>(ComboBox box, T value)
+    {
+        for (var i = 0; i < box.Items.Count; i++)
+        {
+            if (box.Items[i] is ComboBoxItem { Tag: T tag } && EqualityComparer<T>.Default.Equals(tag, value))
+            {
+                box.SelectedIndex = i;
+                return;
+            }
+        }
+        if (box.Items.Count > 0)
+            box.SelectedIndex = 0;
+    }
+
+    private static void ApplyCopiedBarToTarget(TabBar source, TabBar target)
+    {
+        var srcCols = Math.Max(1, source.ColumnCount);
+        var tgtCols = Math.Max(1, target.ColumnCount);
+        int MapCol(int c) => srcCols == tgtCols
+            ? c
+            : Math.Clamp((int)Math.Round(c * (double)tgtCols / srcCols), 0, tgtCols - 1);
+
+        target.RepeatStart = source.RepeatStart;
+        target.RepeatEnd = source.RepeatEnd;
+
+        target.Notes = source.Notes
+            .Select(n => new TabNote
+            {
+                Column = MapCol(n.Column),
+                StringIndex = n.StringIndex,
+                Fret = n.Fret,
+                LinkToNext = n.LinkToNext,
+                GraceFret = n.GraceFret,
+                GraceLink = n.GraceLink,
+                Technique = n.Technique
+            })
+            .GroupBy(n => (n.Column, n.StringIndex))
+            .Select(g => g.Last())
+            .ToList();
+
+        target.ChordMarks = source.ChordMarks
+            .Select(m => new TabChordMark { Column = MapCol(m.Column), Text = m.Text })
+            .GroupBy(m => m.Column)
+            .Select(g => g.Last())
+            .ToList();
+
+        target.ColumnMetas = source.ColumnMetas
+            .Select(m => new TabColumnMeta
+            {
+                Column = MapCol(m.Column),
+                Duration = m.Duration,
+                Dotted = m.Dotted,
+                IsRest = m.IsRest,
+                Strum = m.Strum,
+                PalmMute = m.PalmMute
+            })
+            .GroupBy(m => m.Column)
+            .Select(g => g.Last())
+            .ToList();
+    }
+
+    private static void ApplyStrumPattern(TabBar bar)
+    {
+        bar.Notes.Clear();
+        bar.ColumnMetas.Clear();
+        var colCount = Math.Max(4, bar.ColumnCount);
+        (int Step8, TabStrumKind Strum)[] template =
+        [
+            (0, TabStrumKind.Down),
+            (2, TabStrumKind.Down),
+            (3, TabStrumKind.Up),
+            (5, TabStrumKind.Up),
+            (6, TabStrumKind.Down),
+            (7, TabStrumKind.Up)
+        ];
+        foreach (var (step8, strum) in template)
+        {
+            var col = Math.Clamp((int)Math.Floor(step8 * (colCount / 8.0)), 0, colCount - 1);
+            bar.ColumnMetas.RemoveAll(m => m.Column == col);
+            bar.ColumnMetas.Add(new TabColumnMeta { Column = col, Strum = strum });
+        }
+    }
+
     private static void ApplyArpeggioPattern(TabBar bar, int[] stringOrder1To6)
     {
         bar.Notes.Clear();
@@ -620,16 +1189,52 @@ internal static class TabEditorWindow
 
             for (var s = 0; s < 6; s++)
             {
-                foreach (Match match in Regex.Matches(segs[s], @"(\d{1,2}[hp/\\~b]?\d{0,2}|[xX])"))
+                foreach (Match match in Regex.Matches(segs[s], @"(\(\d{1,2}\)|<\d{1,2}>|/\d{1,2}|\d{1,2}[hp/\\~b]?\d{0,2}|[xX])"))
                 {
                     var ratio = (match.Index + match.Length * 0.5) / Math.Max(1, maxLen);
                     var col = Math.Clamp((int)Math.Floor(ratio * colCount), 0, colCount - 1);
                     bar.Notes.RemoveAll(n => n.Column == col && n.StringIndex == s);
+
+                    var rawTok = match.Value;
+                    var tech = TabNoteTechnique.None;
+                    var fret = rawTok.ToLowerInvariant();
+                    if (rawTok.StartsWith('(') && rawTok.EndsWith(')') && rawTok.Length >= 3)
+                    {
+                        fret = rawTok[1..^1];
+                        tech = TabNoteTechnique.GhostNote;
+                    }
+                    else if (rawTok.StartsWith('<') && rawTok.EndsWith('>') && rawTok.Length >= 3)
+                    {
+                        fret = rawTok[1..^1];
+                        tech = TabNoteTechnique.NaturalHarmonic;
+                    }
+                    else if (rawTok.StartsWith('/') && rawTok.Length >= 2)
+                    {
+                        fret = rawTok[1..];
+                        tech = TabNoteTechnique.SlideIn;
+                    }
+                    else if (rawTok.EndsWith('\\') && rawTok.Length >= 2 && char.IsDigit(rawTok[0]))
+                    {
+                        fret = rawTok[..^1];
+                        tech = TabNoteTechnique.SlideOut;
+                    }
+                    else if ((rawTok.EndsWith('b') || rawTok.EndsWith('B')) && rawTok.Length >= 2 && char.IsDigit(rawTok[0]))
+                    {
+                        fret = rawTok[..^1];
+                        tech = TabNoteTechnique.BendFull;
+                    }
+                    else if (rawTok.EndsWith('~') && rawTok.Length >= 2 && char.IsDigit(rawTok[0]))
+                    {
+                        fret = rawTok[..^1];
+                        tech = TabNoteTechnique.Vibrato;
+                    }
+
                     bar.Notes.Add(new TabNote
                     {
                         Column = col,
                         StringIndex = s,
-                        Fret = match.Value.ToLowerInvariant()
+                        Fret = fret,
+                        Technique = tech
                     });
                 }
             }
@@ -644,15 +1249,101 @@ internal static class TabEditorWindow
         return pipeIdx >= 0 && pipeIdx <= 4 ? line[(pipeIdx + 1)..] : line;
     }
 
+    private sealed record BeatSlot(List<TabNote> Notes, List<TabChordMark> Chords, TabColumnMeta? Meta);
+
+    private static List<BeatSlot> FlattenSlots(TabSection working, int barIdx, int colIdx, out int flatIndex)
+    {
+        var slots = new List<BeatSlot>();
+        flatIndex = 0;
+        for (var b = 0; b < working.Bars.Count; b++)
+        {
+            var bar = working.Bars[b];
+            var colCount = Math.Max(1, bar.ColumnCount);
+            if (b < barIdx)
+                flatIndex += colCount;
+            else if (b == barIdx)
+                flatIndex += Math.Clamp(colIdx, 0, colCount - 1);
+
+            for (var c = 0; c < colCount; c++)
+            {
+                var notes = bar.Notes.Where(n => n.Column == c).ToList();
+                var chords = bar.ChordMarks.Where(m => m.Column == c).ToList();
+                var meta = bar.ColumnMetas.FirstOrDefault(m => m.Column == c);
+                slots.Add(new BeatSlot(notes, chords, meta));
+            }
+        }
+        return slots;
+    }
+
+    private static void WriteSlotsToBars(TabSection working, List<BeatSlot> slots)
+    {
+        var cursor = 0;
+        foreach (var bar in working.Bars)
+        {
+            var colCount = Math.Max(1, bar.ColumnCount);
+            bar.Notes.Clear();
+            bar.ChordMarks.Clear();
+            bar.ColumnMetas.Clear();
+            for (var c = 0; c < colCount && cursor < slots.Count; c++)
+            {
+                var slot = slots[cursor++];
+                foreach (var n in slot.Notes)
+                {
+                    n.Column = c;
+                    bar.Notes.Add(n);
+                }
+                foreach (var cm in slot.Chords)
+                {
+                    cm.Column = c;
+                    bar.ChordMarks.Add(cm);
+                }
+                if (slot.Meta is { } meta)
+                {
+                    meta.Column = c;
+                    bar.ColumnMetas.Add(meta);
+                }
+            }
+        }
+    }
+
+    private static void RippleInsertSlot(TabSection working, int barIdx, int colIdx)
+    {
+        var slots = FlattenSlots(working, barIdx, colIdx, out var flatIdx);
+        if (slots.Count == 0) return;
+
+        var last = slots[^1];
+        if (last.Notes.Count > 0 || last.Chords.Count > 0 || last.Meta is not null)
+        {
+            var newBar = new TabBar { ColumnCount = Math.Max(1, working.ColumnsPerBar) };
+            working.Bars.Add(newBar);
+            for (var k = 0; k < newBar.ColumnCount; k++)
+                slots.Add(new BeatSlot([], [], null));
+        }
+
+        slots.Insert(flatIdx, new BeatSlot([], [], null));
+        slots.RemoveAt(slots.Count - 1);
+        WriteSlotsToBars(working, slots);
+    }
+
+    private static void RippleDeleteSlot(TabSection working, int barIdx, int colIdx)
+    {
+        var slots = FlattenSlots(working, barIdx, colIdx, out var flatIdx);
+        if (slots.Count == 0) return;
+
+        slots.RemoveAt(flatIdx);
+        slots.Add(new BeatSlot([], [], null));
+        WriteSlotsToBars(working, slots);
+    }
+
     private sealed record InsertOption(int Index, string Label);
 
     private sealed class TabEditorCanvas : FrameworkElement
     {
         private const double TuningWidth = 42;
-        private const double ChordAreaHeight = 22;
+        private const double ChordAreaHeight = 38;
         private const double StringSpacing = 20;
         private const double StaffHeight = StringSpacing * 5; // 100
-        private const double RowGap = 28;
+        private const double RowGap = 44;
         private const double BarWidth = 368;
         private const int BarsPerRow = 2;
 
@@ -679,6 +1370,13 @@ internal static class TabEditorWindow
 
         public (int Bar, int Column, int StringIndex) ActiveCell => _cursor;
         public event Action? SelectionChanged;
+        public event Action? BeforeEdit;
+        public event Action? CopyBarRequested;
+        public event Action? PasteBarRequested;
+        public event Action? DuplicateBarRequested;
+        public event Action? InsertSlotRequested;
+        public event Action? DeleteSlotRequested;
+        public event Action? UndoRequested;
 
         public TabEditorCanvas(TabSection section)
         {
@@ -701,7 +1399,7 @@ internal static class TabEditorWindow
             var rows = (int)Math.Ceiling(barCount / (double)BarsPerRow);
             var rowCols = Math.Min(BarsPerRow, barCount);
             Width = TuningWidth + rowCols * BarWidth + 24;
-            Height = 16 + rows * (ChordAreaHeight + StaffHeight + RowGap);
+            Height = 20 + rows * (ChordAreaHeight + StaffHeight + RowGap);
             InvalidateVisual();
         }
 
@@ -731,6 +1429,7 @@ internal static class TabEditorWindow
         public void SetChordMark(int barIndex, int colIndex, string text)
         {
             if (barIndex < 0 || barIndex >= _section.Bars.Count) return;
+            BeforeEdit?.Invoke();
             var bar = _section.Bars[barIndex];
             bar.ChordMarks.RemoveAll(m => m.Column == colIndex);
             if (!string.IsNullOrWhiteSpace(text))
@@ -738,12 +1437,87 @@ internal static class TabEditorWindow
             InvalidateVisual();
         }
 
+        public TabColumnMeta? GetColumnMeta(int barIndex, int colIndex)
+        {
+            if (barIndex < 0 || barIndex >= _section.Bars.Count) return null;
+            return _section.Bars[barIndex].ColumnMetas.FirstOrDefault(m => m.Column == colIndex);
+        }
+
+        public void UpdateColumnMeta(int barIndex, int colIndex, Action<TabColumnMeta> mutate)
+        {
+            if (barIndex < 0 || barIndex >= _section.Bars.Count) return;
+            var bar = _section.Bars[barIndex];
+            if (colIndex < 0 || colIndex >= bar.ColumnCount) return;
+            BeforeEdit?.Invoke();
+            var meta = bar.ColumnMetas.FirstOrDefault(m => m.Column == colIndex);
+            if (meta is null)
+            {
+                meta = new TabColumnMeta { Column = colIndex };
+                bar.ColumnMetas.Add(meta);
+            }
+            mutate(meta);
+            if (meta.Duration == TabDuration.Auto && !meta.Dotted && !meta.IsRest && meta.Strum == TabStrumKind.None && !meta.PalmMute)
+                bar.ColumnMetas.Remove(meta);
+            InvalidateVisual();
+        }
+
+        public TabNote? GetActiveNote()
+        {
+            var (b, c, s) = _cursor;
+            if (b < 0 || b >= _section.Bars.Count) return null;
+            return _section.Bars[b].Notes.FirstOrDefault(n => n.Column == c && n.StringIndex == s && !string.IsNullOrWhiteSpace(n.Fret));
+        }
+
+        public void SetActiveNoteLink(TabLinkKind link)
+        {
+            var note = GetActiveNote();
+            if (note is null || note.LinkToNext == link) return;
+            BeforeEdit?.Invoke();
+            note.LinkToNext = link;
+            InvalidateVisual();
+        }
+
+        public void SetActiveNoteGrace(string graceFret, TabLinkKind? graceLink = null)
+        {
+            var note = GetActiveNote();
+            if (note is null) return;
+            BeforeEdit?.Invoke();
+            var cleaned = (graceFret ?? "").Trim();
+            note.GraceFret = cleaned;
+            if (string.IsNullOrEmpty(cleaned))
+                note.GraceLink = TabLinkKind.None;
+            else if (graceLink is { } link)
+                note.GraceLink = link;
+            else if (note.GraceLink == TabLinkKind.None)
+                note.GraceLink = TabLinkKind.Slide;
+            InvalidateVisual();
+        }
+
+        public void SetActiveNoteTechnique(TabNoteTechnique technique)
+        {
+            var note = GetActiveNote();
+            if (note is null || note.Technique == technique) return;
+            BeforeEdit?.Invoke();
+            note.Technique = technique;
+            InvalidateVisual();
+        }
+
+        public void ToggleColumnPalmMute()
+        {
+            var (b, c, _) = _cursor;
+            var current = GetColumnMeta(b, c)?.PalmMute == true;
+            UpdateColumnMeta(b, c, m => m.PalmMute = !current);
+        }
+
         public void ClearCurrentCell()
         {
             var (b, c, s) = _cursor;
             if (b < 0 || b >= _section.Bars.Count) return;
+            if (!_section.Bars[b].Notes.Any(n => n.Column == c && n.StringIndex == s)) return;
+            BeforeEdit?.Invoke();
             _section.Bars[b].Notes.RemoveAll(n => n.Column == c && n.StringIndex == s);
             InvalidateVisual();
+            SelectionChanged?.Invoke();
         }
 
         public void ApplyToken(string token)
@@ -752,12 +1526,98 @@ internal static class TabEditorWindow
             if (b < 0 || b >= _section.Bars.Count) return;
             var bar = _section.Bars[b];
             var existing = bar.Notes.FirstOrDefault(n => n.Column == c && n.StringIndex == s);
+            var hasExistingFret = existing is not null && !string.IsNullOrWhiteSpace(existing.Fret) && existing.Fret != "/";
 
+            if (token is "b" or "~" or "v" or "NH" or "n" or "g" or "\\")
+            {
+                if (!hasExistingFret || existing is null) return;
+                BeforeEdit?.Invoke();
+                existing.Technique = token switch
+                {
+                    "b" => existing.Technique switch
+                    {
+                        TabNoteTechnique.None => TabNoteTechnique.BendFull,
+                        TabNoteTechnique.BendFull => TabNoteTechnique.BendHalf,
+                        TabNoteTechnique.BendHalf => TabNoteTechnique.BendRelease,
+                        TabNoteTechnique.BendRelease => TabNoteTechnique.BendHalfRelease,
+                        _ => TabNoteTechnique.None
+                    },
+                    "~" or "v" => existing.Technique == TabNoteTechnique.Vibrato ? TabNoteTechnique.None : TabNoteTechnique.Vibrato,
+                    "NH" or "n" => existing.Technique switch
+                    {
+                        TabNoteTechnique.NaturalHarmonic => TabNoteTechnique.ArtificialHarmonic,
+                        TabNoteTechnique.ArtificialHarmonic => TabNoteTechnique.None,
+                        _ => TabNoteTechnique.NaturalHarmonic
+                    },
+                    "g" => existing.Technique == TabNoteTechnique.GhostNote ? TabNoteTechnique.None : TabNoteTechnique.GhostNote,
+                    _ => existing.Technique == TabNoteTechnique.SlideOut ? TabNoteTechnique.None : TabNoteTechnique.SlideOut
+                };
+                InvalidateVisual();
+                SelectionChanged?.Invoke();
+                return;
+            }
+
+            if (token == "/")
+            {
+                if (!hasExistingFret)
+                {
+                    if (existing is null)
+                    {
+                        BeforeEdit?.Invoke();
+                        bar.Notes.Add(new TabNote { Column = c, StringIndex = s, Fret = "/" });
+                        InvalidateVisual();
+                        SelectionChanged?.Invoke();
+                    }
+                    return;
+                }
+                if (!existing!.Fret.EndsWith("/", StringComparison.Ordinal))
+                {
+                    BeforeEdit?.Invoke();
+                    existing.Fret += "/";
+                    InvalidateVisual();
+                    SelectionChanged?.Invoke();
+                }
+                return;
+            }
+
+            if (token is "s" or "h" or "p" && existing is { Fret: "/" })
+                return;
+
+            BeforeEdit?.Invoke();
             string next;
-            if (token is "h" or "p" or "/" or "\\" or "~" or "b")
+            if (token is "s" or "h" or "p")
             {
                 var baseVal = existing?.Fret ?? "0";
                 next = baseVal.EndsWith(token, StringComparison.Ordinal) ? baseVal : baseVal + token;
+            }
+            else if (int.TryParse(token, NumberStyles.Integer, CultureInfo.InvariantCulture, out _) &&
+                     existing is { Fret: "/" })
+            {
+                existing.Technique = TabNoteTechnique.SlideIn;
+                next = token;
+            }
+            else if (token.Length == 1 && char.IsDigit(token[0]) &&
+                     existing is not null &&
+                     existing.Fret.Length >= 2 &&
+                     existing.Fret[^1] is 's' or '/' or '\\' or 'h' or 'p')
+            {
+                var op = existing.Fret[^1];
+                var prefix = existing.Fret[..^1].Trim();
+                if (!string.IsNullOrEmpty(prefix))
+                {
+                    existing.GraceFret = prefix;
+                    existing.GraceLink = op switch
+                    {
+                        'h' => TabLinkKind.HammerOn,
+                        'p' => TabLinkKind.PullOff,
+                        _ => TabLinkKind.Slide
+                    };
+                    next = token;
+                }
+                else
+                {
+                    next = token;
+                }
             }
             else if (token.Length == 1 && char.IsDigit(token[0]) &&
                      existing is not null &&
@@ -768,10 +1628,6 @@ internal static class TabEditorWindow
                 {
                     var combined = prevNum * 10 + (token[0] - '0');
                     next = combined <= 24 ? combined.ToString(CultureInfo.InvariantCulture) : token;
-                }
-                else if (existing.Fret.EndsWith('h') || existing.Fret.EndsWith('p') || existing.Fret.EndsWith('/') || existing.Fret.EndsWith('\\'))
-                {
-                    next = existing.Fret + token;
                 }
                 else
                 {
@@ -791,6 +1647,7 @@ internal static class TabEditorWindow
                 bar.Notes.Add(new TabNote { Column = c, StringIndex = s, Fret = next });
 
             InvalidateVisual();
+            SelectionChanged?.Invoke();
         }
 
         protected override void OnRender(DrawingContext dc)
@@ -806,7 +1663,7 @@ internal static class TabEditorWindow
             {
                 var rowStart = r * BarsPerRow;
                 var countInRow = Math.Min(BarsPerRow, bars.Count - rowStart);
-                var rowTop = 12 + r * (ChordAreaHeight + StaffHeight + RowGap);
+                var rowTop = 16 + r * (ChordAreaHeight + StaffHeight + RowGap);
                 var staffTop = rowTop + ChordAreaHeight;
                 var staffBottom = staffTop + StaffHeight;
                 var rowEndX = TuningWidth + countInRow * BarWidth;
@@ -833,13 +1690,16 @@ internal static class TabEditorWindow
 
                     // Bar number
                     var barTag = CreateText($"小节 {bIdx + 1}", 10, SmallFont, MutedBrush, _pixelsPerDip);
-                    dc.DrawText(barTag, new Point(barLeft + 2, rowTop - 10));
+                    dc.DrawText(barTag, new Point(barLeft + 2, rowTop - 12));
 
-                    // Subtle vertical column guides
-                    for (var c = 0; c < colCount; c++)
+                    // Subtle vertical column guides when rhythm stems are hidden
+                    if (!_section.ShowRhythmStems)
                     {
-                        var cx = barLeft + (c + 0.5) * colWidth;
-                        dc.DrawLine(LinePen, new Point(cx, staffBottom + 3), new Point(cx, staffBottom + 7));
+                        for (var c = 0; c < colCount; c++)
+                        {
+                            var cx = barLeft + (c + 0.5) * colWidth;
+                            dc.DrawLine(LinePen, new Point(cx, staffBottom + 3), new Point(cx, staffBottom + 7));
+                        }
                     }
 
                     // Hover cell highlight
@@ -866,19 +1726,35 @@ internal static class TabEditorWindow
                         dc.DrawText(ft, new Point(cx - ft.Width / 2, rowTop + 2));
                     }
 
-                    // Fret notes
+                    // Strum arrows and arpeggio waves behind fret masks
+                    TabPainter.DrawBarPreNotes(dc, bar, barLeft, barRight, staffTop, StringSpacing, scale: 1.45);
+
+                    // Fret notes (and grace notes)
                     foreach (var note in bar.Notes)
                     {
                         if (note.StringIndex is < 0 or > 5 || note.Column < 0 || note.Column >= colCount || string.IsNullOrWhiteSpace(note.Fret))
                             continue;
                         var cx = barLeft + (note.Column + 0.5) * colWidth;
                         var sy = staffTop + note.StringIndex * StringSpacing;
-                        var ft = CreateText(note.Fret, 12.5, FretFont, InkBrush, _pixelsPerDip);
-                        dc.DrawRectangle(Brushes.White, null, new Rect(cx - ft.Width / 2 - 3, sy - ft.Height / 2 + 1, ft.Width + 6, ft.Height - 2));
-                        dc.DrawText(ft, new Point(cx - ft.Width / 2, sy - ft.Height / 2));
+                        TabPainter.DrawNoteCell(dc, note, cx, sy, 12.5, FretFont, InkBrush, Brushes.White, _pixelsPerDip, scale: 1.35);
                     }
 
-                    dc.DrawLine(BarPen, new Point(barRight, staffTop), new Point(barRight, staffBottom));
+                    // Repeat barlines, links (H/P/S/Tie), and rhythm stems/beams/rests
+                    TabPainter.DrawBarPostNotes(
+                        dc,
+                        bar,
+                        barLeft,
+                        barRight,
+                        staffTop,
+                        staffBottom,
+                        StringSpacing,
+                        _section.ShowRhythmStems,
+                        Brushes.White,
+                        _pixelsPerDip,
+                        scale: 1.45);
+
+                    if (!bar.RepeatEnd)
+                        dc.DrawLine(BarPen, new Point(barRight, staffTop), new Point(barRight, staffBottom));
                 }
             }
         }
@@ -899,7 +1775,7 @@ internal static class TabEditorWindow
             {
                 var rowStart = r * BarsPerRow;
                 var countInRow = Math.Min(BarsPerRow, bars.Count - rowStart);
-                var rowTop = 12 + r * (ChordAreaHeight + StaffHeight + RowGap);
+                var rowTop = 16 + r * (ChordAreaHeight + StaffHeight + RowGap);
                 var staffTop = rowTop + ChordAreaHeight;
                 var staffBottom = staffTop + StaffHeight;
 
@@ -989,12 +1865,37 @@ internal static class TabEditorWindow
                 e.Handled = true;
                 return;
             }
+            if (e.Key == Key.Insert && (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Alt)) == ModifierKeys.None)
+            {
+                InsertSlotRequested?.Invoke();
+                e.Handled = true;
+                return;
+            }
+            if ((e.Key == Key.Delete && (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift) ||
+                (e.Key == Key.Back && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control))
+            {
+                DeleteSlotRequested?.Invoke();
+                e.Handled = true;
+                return;
+            }
             if (e.Key is Key.Delete or Key.Back)
             {
                 ClearCurrentCell();
                 e.Handled = true;
                 return;
             }
+
+            if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control &&
+                (Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.None)
+            {
+                if (e.Key == Key.Z) { UndoRequested?.Invoke(); e.Handled = true; return; }
+                if (e.Key == Key.C) { CopyBarRequested?.Invoke(); e.Handled = true; return; }
+                if (e.Key == Key.V) { PasteBarRequested?.Invoke(); e.Handled = true; return; }
+                if (e.Key == Key.D) { DuplicateBarRequested?.Invoke(); e.Handled = true; return; }
+            }
+
+            if ((Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Alt)) != ModifierKeys.None)
+                return;
 
             if (e.Key is >= Key.D0 and <= Key.D9)
             {
@@ -1009,8 +1910,14 @@ internal static class TabEditorWindow
                 return;
             }
             if (e.Key == Key.X) { ApplyToken("x"); e.Handled = true; return; }
+            if (e.Key == Key.S) { ApplyToken("s"); e.Handled = true; return; }
             if (e.Key == Key.H) { ApplyToken("h"); e.Handled = true; return; }
             if (e.Key == Key.P) { ApplyToken("p"); e.Handled = true; return; }
+            if (e.Key == Key.B) { ApplyToken("b"); e.Handled = true; return; }
+            if (e.Key == Key.N) { ApplyToken("n"); e.Handled = true; return; }
+            if (e.Key == Key.V) { ApplyToken("~"); e.Handled = true; return; }
+            if (e.Key == Key.G) { ApplyToken("g"); e.Handled = true; return; }
+            if (e.Key == Key.M) { ToggleColumnPalmMute(); SelectionChanged?.Invoke(); e.Handled = true; return; }
             if (e.Key == Key.OemQuestion) { ApplyToken("/"); e.Handled = true; return; }
             if (e.Key == Key.OemPipe) { ApplyToken("\\"); e.Handled = true; return; }
             if (e.Key == Key.Oem3) { ApplyToken("~"); e.Handled = true; return; }

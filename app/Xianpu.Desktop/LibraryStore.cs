@@ -88,6 +88,18 @@ public sealed class LibraryStore
         return song;
     }
 
+    public static void SaveTabSection(TabSection section, string path) =>
+        File.WriteAllText(path, JsonSerializer.Serialize(section, JsonOptions));
+
+    public static TabSection LoadTabSection(string path)
+    {
+        var section = JsonSerializer.Deserialize<TabSection>(File.ReadAllText(path), JsonOptions)
+                      ?? throw new InvalidDataException("六线谱片段文件为空或格式不正确。");
+        NormalizeSong(new SongModel { TabSections = [section] });
+        section.Id = Guid.NewGuid().ToString("N");
+        return section;
+    }
+
     public static void NormalizeSong(SongModel song)
     {
         song.Lines ??= [];
@@ -159,6 +171,9 @@ public sealed class LibraryStore
                     {
                         var last = g.Last();
                         last.Fret = last.Fret.Trim();
+                        last.GraceFret = (last.GraceFret ?? "").Trim();
+                        if (string.IsNullOrEmpty(last.GraceFret))
+                            last.GraceLink = TabLinkKind.None;
                         return last;
                     })
                     .ToList();
@@ -173,6 +188,15 @@ public sealed class LibraryStore
                         last.Text = last.Text.Trim();
                         return last;
                     })
+                    .ToList();
+
+                bar.ColumnMetas ??= [];
+                bar.ColumnMetas = bar.ColumnMetas
+                    .Where(m => m.Column >= 0 && m.Column < bar.ColumnCount)
+                    .GroupBy(m => m.Column)
+                    .Select(g => g.Last())
+                    .Where(m => m.Duration != TabDuration.Auto || m.Dotted || m.IsRest || m.Strum != TabStrumKind.None || m.PalmMute)
+                    .OrderBy(m => m.Column)
                     .ToList();
             }
         }
