@@ -46,7 +46,7 @@ StringNote/
 │   ├── ci.yml                   # Push/PR 自动在 windows-latest 上验证 .NET 10 Release 构建
 │   └── release.yml              # 推送 v* 标签或手动触发：Windows 构建 + 便携包 + Inno 安装包 + GitHub Release
 ├── Build.ps1                    # 本地 Windows 构建与打包脚本
-├── LICENSE                      # MIT 开源许可证
+├── LICENSE                      # 非商业用途许可协议（个人免费使用，禁止商用）
 ├── 启动弦谱.cmd                 # 根目录快捷启动脚本
 └── README.md                    # 项目中文说明文档
 ```
