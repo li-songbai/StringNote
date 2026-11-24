@@ -35,6 +35,7 @@ StringNote/
 │   ├── TabPainter.cs            # 六线谱矢量绘制引擎（供编辑器与主谱面/PNG 导出共用）
 │   ├── AiScoreImporter.cs       # AI 识谱 Prompt 模板（弹唱谱 / 指弹谱）与容错 JSON 解析器
 │   ├── AiImportDialog.cs        # AI 识谱导入引导弹窗（一键复制 Prompt → 粘贴 JSON 导入/追加）
+│   ├── SettingsDialog.cs        # 设置与曲库备份弹窗（自定义数据目录、自动历史快照、整库导出/恢复）
 │   ├── AppDialogs.cs            # 统一卡片式无边框弹窗工厂与设计令牌（颜色、按钮、圆角、阴影）
 │   ├── TrayService.cs           # Windows 系统托盘图标与最小化驻留服务
 │   ├── UpdateService.cs         # 基于 GitHub Releases API 的自动检查更新与静默覆盖安装
@@ -42,8 +43,10 @@ StringNote/
 ├── installer/StringNote.iss     # Inno Setup 6 安装包脚本（Per-User 免 UAC 安装、.xianpu.json 关联）
 ├── docs/                        # GitHub Pages 静态项目官网（https://li-songbai.github.io/StringNote/）
 ├── .github/workflows/
+│   ├── ci.yml                   # Push/PR 自动在 windows-latest 上验证 .NET 10 Release 构建
 │   └── release.yml              # 推送 v* 标签或手动触发：Windows 构建 + 便携包 + Inno 安装包 + GitHub Release
 ├── Build.ps1                    # 本地 Windows 构建与打包脚本
+├── LICENSE                      # MIT 开源许可证
 ├── 启动弦谱.cmd                 # 根目录快捷启动脚本
 └── README.md                    # 项目中文说明文档
 ```
