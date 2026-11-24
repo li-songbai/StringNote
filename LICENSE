@@ -1,21 +1,29 @@
-MIT License
+StringNote (弦笺) Non-Commercial License
+弦笺 · StringNote 非商业用途许可协议
 
-Copyright (c) 2026 li-songbai (StringNote)
+Copyright (c) 2026 li-songbai (StringNote). All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+本软件及源码采用「非商业用途许可（Non-Commercial License，参考 CC BY-NC-SA 4.0 原则）」发布：
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. 允许的使用范围（Permitted Uses）
+   - 允许个人用户免费下载、安装、使用本软件用于个人学习、吉他练习、个人记谱与非营利性曲谱分享。
+   - 允许出于学习、研究或个人定制目的查看、修改本仓库源码，并在遵守本协议的前提下以相同许可方式分享修改后的非商业版本。
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+2. 禁止商业用途（No Commercial Use）
+   - 未经版权持有人（li-songbai）事先书面授权，严禁将本软件或其全部/部分源码用于任何形式的商业用途，包括但不限于：
+     a) 直接或间接售卖本软件、修改版或打包安装包；
+     b) 将本软件作为付费课程、会员服务、商业平台或商业产品的组成部分对外提供；
+     c) 去除或篡改原作者署名、版权声明后进行闭源分发或商业套壳。
+   - 如需商业授权，请通过 GitHub 仓库（https://github.com/li-songbai/StringNote）联系作者。
+
+3. 署名与相同方式共享（Attribution & ShareAlike）
+   - 任何形式的二次分发或衍生作品必须保留原始版权声明、作者署名（li-songbai / StringNote）以及本许可协议全文，并以不弱于本协议的相同非商业许可条款发布。
+
+4. 免责声明（Disclaimer of Warranty）
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.

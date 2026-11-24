@@ -86,3 +86,10 @@ pwsh -ExecutionPolicy Bypass -File .\Build.ps1 -SelfContained -Version 0.1.0-bet
 3. 亦可在 GitHub 仓库的 **Actions → Release StringNote → Run workflow** 中手动触发。
 
 > 开发者与 AI 协作者请参阅 [AGENTS.md](AGENTS.md) 了解代码架构与开发约定。
+
+---
+
+## 许可协议
+
+本项目采用 [非商业用途许可协议](LICENSE)：**个人学习、练琴与非营利分享完全免费，未经作者书面授权禁止任何形式的商业使用或闭源售卖。**
+
