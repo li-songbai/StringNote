@@ -25,6 +25,7 @@ public sealed class CustomChordDefinition
 public sealed class SongModel : INotifyPropertyChanged
 {
     private string _title = "未命名歌曲";
+    private string _artist = "";
     private string _originalKey = "";
     private string _selectedKey = "";
     private string _capo = "";
@@ -38,6 +39,7 @@ public sealed class SongModel : INotifyPropertyChanged
 
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Title { get => _title; set => Set(ref _title, value); }
+    public string Artist { get => _artist; set { if (Set(ref _artist, value)) OnPropertyChanged(nameof(ListSummary)); } }
     public string OriginalKey { get => _originalKey; set => Set(ref _originalKey, value); }
     public string SelectedKey { get => _selectedKey; set { if (Set(ref _selectedKey, value)) OnPropertyChanged(nameof(ListSummary)); } }
     public string Capo { get => _capo; set { if (Set(ref _capo, value)) OnPropertyChanged(nameof(ListSummary)); } }
@@ -51,7 +53,7 @@ public sealed class SongModel : INotifyPropertyChanged
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
     public ObservableCollection<LyricLine> Lines { get; set; } = [];
     public ObservableCollection<TabSection> TabSections { get; set; } = [];
-    public string ListSummary => string.Join(" · ", new[] { Category, SelectedKey, Capo }.Where(x => !string.IsNullOrWhiteSpace(x)));
+    public string ListSummary => string.Join(" · ", new[] { Artist, Category, SelectedKey, Capo }.Where(x => !string.IsNullOrWhiteSpace(x)));
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private bool Set<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)

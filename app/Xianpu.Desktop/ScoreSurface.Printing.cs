@@ -9,8 +9,15 @@ public sealed partial class ScoreSurface
 {
     public DocumentPaginator CreatePrintPaginator(Size printablePageSize)
     {
+        IsExporting = true;
         Rebuild();
         return new ScorePrintPaginator(this, printablePageSize);
+    }
+
+    public void EndPrintSession()
+    {
+        IsExporting = false;
+        Rebuild();
     }
 
     private List<(double StartY, double EndY)> ComputePrintPageSlices(double maxSliceHeight)

@@ -92,6 +92,8 @@ public sealed partial class ScoreSurface : FrameworkElement
     public bool ContinuousPaintMode { get; set; }
     public int? SelectedLineIndex { get; private set; }
     public bool IsExporting { get; set; }
+    public bool HideHeaderOnScreen { get; set; } = true;
+    private double EffectiveHeaderHeight => (HideHeaderOnScreen && !IsExporting) ? 14.0 : HeaderHeight;
     public bool HasSelectedChord => _selectedPlaced is not null;
     public ChordAnchor? Caret => _caret;
     public double PaperWidthCurrent { get; private set; } = FlowPaperWidth;
@@ -242,7 +244,7 @@ public sealed partial class ScoreSurface : FrameworkElement
             ? Song.TabSections.Where(t => t.Kind == TabSectionKind.Outro || (t.Kind == TabSectionKind.Interlude && t.InsertAfterLineIndex >= Song.Lines.Count)).ToList()
             : [];
 
-        var topY = HeaderHeight;
+        var topY = EffectiveHeaderHeight;
         foreach (var tab in introTabs)
         {
             var tabHeight = TabPainter.MeasureSectionHeight(tab, usableWidth);
@@ -827,7 +829,7 @@ public sealed partial class ScoreSurface : FrameworkElement
     {
         var row = _rows.FirstOrDefault(r => r.Index == anchor.LineIndex);
         if (row is null)
-            return new Rect(_pageMarginCurrent, HeaderHeight, 22, 52);
+            return new Rect(_pageMarginCurrent, EffectiveHeaderHeight, 22, 52);
 
         var pos = Math.Clamp(anchor.Position, 0, row.Line.Text.Length);
         var chunkIndex = FindChunk(row.Chunks, pos);
@@ -1053,26 +1055,27 @@ public sealed partial class ScoreSurface : FrameworkElement
 
     public System.Windows.Media.Imaging.BitmapSource RenderPng()
     {
-        Rebuild();
         var visual = new DrawingVisual();
         IsExporting = true;
         try
         {
+            Rebuild();
             using (var drawing = visual.RenderOpen())
                 DrawScore(drawing);
+            var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(
+                (int)Math.Ceiling(PaperWidthCurrent * 2),
+                (int)Math.Ceiling(Height * 2),
+                192,
+                192,
+                PixelFormats.Pbgra32);
+            bitmap.Render(visual);
+            return bitmap;
         }
         finally
         {
             IsExporting = false;
+            Rebuild();
         }
-        var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(
-            (int)Math.Ceiling(PaperWidthCurrent * 2),
-            (int)Math.Ceiling(Height * 2),
-            192,
-            192,
-            PixelFormats.Pbgra32);
-        bitmap.Render(visual);
-        return bitmap;
     }
 
     private void DrawScore(DrawingContext dc)
@@ -1085,23 +1088,27 @@ public sealed partial class ScoreSurface : FrameworkElement
             return;
         }
 
-        var title = string.IsNullOrWhiteSpace(Song.Title) ? "未命名歌曲" : Song.Title;
-        DrawCentered(dc, title, 28, 18, ChordTypeface, Ink);
-        var metadata = string.Join("      ", new[]
+        if (!HideHeaderOnScreen || IsExporting)
         {
-            string.IsNullOrWhiteSpace(Song.OriginalKey) ? null : $"原调 {Song.OriginalKey}",
-            string.IsNullOrWhiteSpace(Song.SelectedKey) ? null : $"选调 {Song.SelectedKey}",
-            string.IsNullOrWhiteSpace(Song.Capo) ? null : $"变调夹 {Song.Capo}",
-            Song.Bpm > 0 ? $"BPM {Song.Bpm}" : null
-        }.Where(x => x is not null));
-        if (!string.IsNullOrWhiteSpace(metadata))
-            DrawCentered(dc, metadata, 13.5, 57, LyricTypeface, Quiet);
-        dc.DrawLine(new Pen(Rule, 1), new Point(_pageMarginCurrent, 82), new Point(PaperWidthCurrent - _pageMarginCurrent, 82));
+            var title = string.IsNullOrWhiteSpace(Song.Title) ? "未命名歌曲" : Song.Title;
+            DrawCentered(dc, title, 28, 18, ChordTypeface, Ink);
+            var metadata = string.Join("      ", new[]
+            {
+                string.IsNullOrWhiteSpace(Song.Artist) ? null : $"原唱 {Song.Artist}",
+                string.IsNullOrWhiteSpace(Song.OriginalKey) ? null : $"原调 {Song.OriginalKey}",
+                string.IsNullOrWhiteSpace(Song.SelectedKey) ? null : $"选调 {Song.SelectedKey}",
+                string.IsNullOrWhiteSpace(Song.Capo) ? null : $"变调夹 {Song.Capo}",
+                Song.Bpm > 0 ? $"BPM {Song.Bpm}" : null
+            }.Where(x => x is not null));
+            if (!string.IsNullOrWhiteSpace(metadata))
+                DrawCentered(dc, metadata, 13.5, 57, LyricTypeface, Quiet);
+            dc.DrawLine(new Pen(Rule, 1), new Point(_pageMarginCurrent, 82), new Point(PaperWidthCurrent - _pageMarginCurrent, 82));
+        }
 
         if (_rows.Count == 0 && _tabLayouts.Count == 0)
         {
-            DrawCentered(dc, "这首曲谱还没有歌词", 16, HeaderHeight + 54, ChordTypeface, Quiet);
-            DrawCentered(dc, "点击上方「导入 LRC」或「编辑歌词」铺开歌词，再点击字位填入左手和弦；也可点击「+ 六线谱」添加前奏/间奏", 12.5, HeaderHeight + 84, LyricTypeface, Quiet);
+            DrawCentered(dc, "这首曲谱还没有歌词", 16, EffectiveHeaderHeight + 54, ChordTypeface, Quiet);
+            DrawCentered(dc, "点击左上角「+ 导入」或「编排 → 编辑歌词」铺开歌词，再点击字位填入左手和弦；也可点「+ 六线谱」添加前奏/间奏", 12.5, EffectiveHeaderHeight + 84, LyricTypeface, Quiet);
             return;
         }
 
