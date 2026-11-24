@@ -90,27 +90,9 @@ public partial class MainWindow
         if (LibrarySearchPlaceholder is not null)
             LibrarySearchPlaceholder.Visibility = string.IsNullOrEmpty(query) ? Visibility.Visible : Visibility.Collapsed;
 
-        var selectedCategory = LibraryCategoryFilter?.SelectedItem as string;
-
-        IEnumerable<SongModel> items = _library.Songs;
-
-        if (_favoritesOnly)
-            items = items.Where(s => s.Favorite);
-
-        if (!string.IsNullOrWhiteSpace(selectedCategory) && selectedCategory != AllCategoriesLabel)
-            items = items.Where(s => string.Equals(s.Category, selectedCategory, StringComparison.OrdinalIgnoreCase));
-
-        if (!string.IsNullOrWhiteSpace(query))
-        {
-            items = items.Where(s =>
-                s.Title.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                s.OriginalKey.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                s.SelectedKey.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                s.Category.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                s.Lines.Any(l => l.Text.Contains(query, StringComparison.OrdinalIgnoreCase)));
-        }
-
-        var filtered = items.OrderByDescending(s => s.UpdatedAt).ToList();
+        _vm.SearchQuery = query;
+        _vm.SelectedCategoryFilter = LibraryCategoryFilter?.SelectedItem as string ?? AllCategoriesLabel;
+        var filtered = _vm.ComputeFilteredSongs();
 
         var prevInit = _initializing;
         _initializing = true;
@@ -118,7 +100,7 @@ public partial class MainWindow
         LibrarySongList.SelectedItem = _selectedSong is not null && filtered.Contains(_selectedSong) ? _selectedSong : null;
         _initializing = prevInit;
 
-        LibraryToggle.Content = $"曲库 ({_library.Songs.Count})";
+        LibraryToggle.Content = _vm.LibraryToggleText;
         LibraryCountText.Text = filtered.Count == _library.Songs.Count
             ? $"{_library.Songs.Count}"
             : $"{filtered.Count}/{_library.Songs.Count}";
@@ -184,26 +166,7 @@ public partial class MainWindow
         if (_selectedSong is null) return;
         CommitFields();
 
-        var clone = new SongModel
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            Title = string.IsNullOrWhiteSpace(_selectedSong.Title) ? "未命名歌曲 (副本)" : _selectedSong.Title + " (副本)",
-            OriginalKey = _selectedSong.OriginalKey,
-            SelectedKey = _selectedSong.SelectedKey,
-            Capo = _selectedSong.Capo,
-            Bpm = _selectedSong.Bpm,
-            Category = _selectedSong.Category,
-            Favorite = _selectedSong.Favorite,
-            ChordDisplayMode = _selectedSong.ChordDisplayMode,
-            ColumnMode = _selectedSong.ColumnMode,
-            ShowChordGuide = _selectedSong.ShowChordGuide,
-            ShowTabSections = _selectedSong.ShowTabSections,
-            UpdatedAt = DateTime.Now,
-            Lines = new System.Collections.ObjectModel.ObservableCollection<LyricLine>(
-                _selectedSong.Lines.Select(line => line.Clone())),
-            TabSections = new System.Collections.ObjectModel.ObservableCollection<TabSection>(
-                _selectedSong.TabSections.Select(t => t.Clone()))
-        };
+        var clone = ViewModels.MainViewModel.CreateDuplicateSong(_selectedSong);
 
         _library.Songs.Add(clone);
         SelectSong(clone);

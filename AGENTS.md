@@ -9,7 +9,7 @@
 - **项目名称**：弦笺 · StringNote（`Xianpu.Desktop`）
 - **定位**：面向 Windows 的轻量原生吉他弹唱与指弹记谱工具（WPF / .NET 10）
 - **核心工作流**：LRC / 文本 / AI 识谱导入 → 谱面可视化标记左手和弦与六线谱（TAB）→ 段落编排与多段叠行排版 → 导出高清 PNG 曲谱 / `.xianpu.json` 分享
-- **目标平台**：`net10.0-windows`（WPF + WinForms 托盘集成，无第三方 NuGet 依赖）
+- **目标平台**：`net10.0-windows`（WPF + WinForms 托盘集成，仅引入微软官方 `CommunityToolkit.Mvvm` 支撑渐进式 MVVM）
 
 ---
 
@@ -18,6 +18,8 @@
 ```text
 StringNote/
 ├── app/Xianpu.Desktop/          # 核心 WPF 桌面应用（.NET 10）
+│   ├── ViewModels/              # MVVM 视图模型（CommunityToolkit.Mvvm）：MainViewModel、PracticeViewModel
+│   ├── Services/                # 纯逻辑应用服务：SongUndoManager 等
 │   ├── Models.cs                # 数据模型：LibraryData、SongModel、LyricLine、ChordPlacement、TabSection/TabBar/TabNote 等
 │   ├── LibraryStore.cs          # 本地曲库持久化（%LocalAppData%\Xianpu\library.json，支持 XIANPU_DATA_DIR 覆盖）与 .xianpu.json 导入导出
 │   ├── MainWindow.xaml(.cs)     # 主窗口生命周期、选歌协调与视口缩放（按职责拆分为 MainWindow.ChordPopover.cs / MainWindow.EditingAndIO.cs / MainWindow.Library.cs / MainWindow.UndoAndSettings.cs / MainWindow.Practice.cs / MainWindow.UpdatesAndChrome.cs）

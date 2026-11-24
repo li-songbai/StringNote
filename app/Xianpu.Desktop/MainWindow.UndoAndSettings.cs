@@ -51,10 +51,8 @@ public partial class MainWindow
 
     private void ResetUndoHistory(SongModel? song)
     {
-        _undoStack.Clear();
-        _redoStack.Clear();
-        _currentSongSnapshot = song is null ? null : LibraryStore.SerializeSongSnapshot(song);
-        UpdateUndoRedoButtons();
+        _vm.UndoManager.Reset(song);
+        _vm.RefreshUndoState();
     }
 
     private void RecordUndoSnapshotIfChanged()
@@ -62,36 +60,13 @@ public partial class MainWindow
         if (_initializing || _restoringUndo || _selectedSong is null)
             return;
 
-        var nextSnapshot = LibraryStore.SerializeSongSnapshot(_selectedSong);
-        if (_currentSongSnapshot is not null &&
-            !string.Equals(nextSnapshot, _currentSongSnapshot, StringComparison.Ordinal))
-        {
-            _undoStack.Add(_currentSongSnapshot);
-            if (_undoStack.Count > MaxUndoSteps)
-                _undoStack.RemoveAt(0);
-            _redoStack.Clear();
-        }
-        _currentSongSnapshot = nextSnapshot;
-        UpdateUndoRedoButtons();
+        _vm.UndoManager.RecordIfChanged(_selectedSong);
+        _vm.RefreshUndoState();
     }
 
     private void UpdateUndoRedoButtons()
     {
-        if (UndoButton is not null)
-        {
-            UndoButton.IsEnabled = _undoStack.Count > 0;
-            UndoButton.ToolTip = _undoStack.Count > 0
-                ? $"撤销上一步谱面编辑（Ctrl+Z，可撤销 {_undoStack.Count} 步）"
-                : "撤销上一步谱面编辑 (Ctrl+Z)";
-        }
-
-        if (RedoButton is not null)
-        {
-            RedoButton.IsEnabled = _redoStack.Count > 0;
-            RedoButton.ToolTip = _redoStack.Count > 0
-                ? $"重做已撤销的编辑（Ctrl+Y，可重做 {_redoStack.Count} 步）"
-                : "重做已撤销的编辑 (Ctrl+Y)";
-        }
+        _vm.RefreshUndoState();
     }
 
     private void Undo_Click(object sender, RoutedEventArgs e) => PerformUndo();
@@ -100,28 +75,16 @@ public partial class MainWindow
 
     private void PerformUndo()
     {
-        if (_selectedSong is null || _undoStack.Count == 0)
+        if (_selectedSong is null || !_vm.UndoManager.TryPopUndo(out var targetJson) || targetJson is null)
             return;
-
-        var targetJson = _undoStack[^1];
-        _undoStack.RemoveAt(_undoStack.Count - 1);
-
-        if (_currentSongSnapshot is not null)
-            _redoStack.Add(_currentSongSnapshot);
 
         ApplySongSnapshot(targetJson, "已撤销上一步谱面编辑。");
     }
 
     private void PerformRedo()
     {
-        if (_selectedSong is null || _redoStack.Count == 0)
+        if (_selectedSong is null || !_vm.UndoManager.TryPopRedo(out var targetJson) || targetJson is null)
             return;
-
-        var targetJson = _redoStack[^1];
-        _redoStack.RemoveAt(_redoStack.Count - 1);
-
-        if (_currentSongSnapshot is not null)
-            _undoStack.Add(_currentSongSnapshot);
 
         ApplySongSnapshot(targetJson, "已重做上一步谱面编辑。");
     }
@@ -179,7 +142,6 @@ public partial class MainWindow
             _restoringUndo = false;
         }
 
-        _currentSongSnapshot = snapshotJson;
         UpdateFavoriteToggleVisual();
         UpdateCaptionTitle();
         ScoreSurface.SetSong(_selectedSong);

@@ -285,8 +285,8 @@
 
                     <!-- Right: Chord & Layout Controls + Optional TAB Component -->
                     <WrapPanel VerticalAlignment="Center">
-                        <Button x:Name="UndoButton" Content="↩ 撤销" Padding="7,4" FontSize="12" Click="Undo_Click" IsEnabled="False" Margin="0,2,4,2" ToolTip="撤销上一步谱面编辑 (Ctrl+Z)" />
-                        <Button x:Name="RedoButton" Content="↪ 重做" Padding="7,4" FontSize="12" Click="Redo_Click" IsEnabled="False" Margin="0,2,8,2" ToolTip="重做已撤销的编辑 (Ctrl+Y)" />
+                        <Button x:Name="UndoButton" Content="↩ 撤销" Padding="7,4" FontSize="12" Command="{Binding UndoCommand}" ToolTip="{Binding UndoToolTip}" Margin="0,2,4,2" />
+                        <Button x:Name="RedoButton" Content="↪ 重做" Padding="7,4" FontSize="12" Command="{Binding RedoCommand}" ToolTip="{Binding RedoToolTip}" Margin="0,2,8,2" />
                         <Border Width="1" Height="18" Background="#CBD5E1" Margin="0,2,8,2" />
                         <Button x:Name="CopyLineChordsButton" Content="复制句和弦" Padding="7,4" FontSize="12" Click="CopyLineChords_Click" IsEnabled="False" Margin="0,2,5,2" ToolTip="复制当前选中句的全部和弦走向（Ctrl+C；Ctrl+D 直接复制到下一句）" />
                         <Button x:Name="PasteLineChordsButton" Content="粘贴句和弦" Padding="7,4" FontSize="12" Click="PasteLineChords_Click" IsEnabled="False" Margin="0,2,5,2" ToolTip="将已复制的和弦走向粘贴到当前选中句（Ctrl+V）" />
@@ -537,7 +537,7 @@
                 <DockPanel LastChildFill="True">
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
                         <!-- Practice: Auto-Scroll (Teleprompter) -->
-                        <ToggleButton x:Name="AutoScrollToggle" Content="▶ 滚屏" Padding="7,1" FontSize="11" Margin="0,0,4,0"
+                        <ToggleButton x:Name="AutoScrollToggle" Content="{Binding Practice.AutoScrollButtonText}" Padding="7,1" FontSize="11" Margin="0,0,4,0"
                                       Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" Foreground="#334155" Cursor="Hand"
                                       Checked="AutoScrollToggle_Changed" Unchecked="AutoScrollToggle_Changed"
                                       ToolTip="开启/暂停自动滚屏看谱（滚屏激活时按 Space 空格键可随时暂停/继续）" />
@@ -554,13 +554,13 @@
                         <Border Width="1" Height="14" Background="#CBD5E1" Margin="0,0,8,0" />
 
                         <!-- Practice: Metronome -->
-                        <ToggleButton x:Name="MetronomeToggle" Content="♩ 节拍器" Padding="7,1" FontSize="11" Margin="0,0,4,0"
+                        <ToggleButton x:Name="MetronomeToggle" Content="{Binding Practice.MetronomeButtonText}" Padding="7,1" FontSize="11" Margin="0,0,4,0"
                                       Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" Foreground="#334155" Cursor="Hand"
                                       Checked="MetronomeToggle_Changed" Unchecked="MetronomeToggle_Changed"
                                       ToolTip="开启/关闭内置节拍器（自动使用谱头 BPM，未填时默认 80 BPM）" />
-                        <Button x:Name="MetronomeMeterButton" Content="4/4" Padding="6,1" FontSize="11" Margin="0,0,4,0"
+                        <Button x:Name="MetronomeMeterButton" Content="{Binding Practice.MetronomeMeterLabel}" Padding="6,1" FontSize="11" Margin="0,0,4,0"
                                 Click="MetronomeMeter_Click" ToolTip="点击切换节拍器拍号（4/4 / 3/4 / 6/8）" />
-                        <TextBlock x:Name="MetronomeBeatText" Text="" FontSize="11" FontWeight="Bold" Foreground="#2F6B48"
+                        <TextBlock x:Name="MetronomeBeatText" Text="{Binding Practice.MetronomeBeatText}" FontSize="11" FontWeight="Bold" Foreground="#2F6B48"
                                    VerticalAlignment="Center" MinWidth="28" Margin="0,0,8,0" />
 
                         <Border Width="1" Height="14" Background="#CBD5E1" Margin="0,0,8,0" />
@@ -568,12 +568,12 @@
                         <!-- Zoom -->
                         <TextBlock Text="谱面缩放" FontSize="11" Foreground="#64748B" VerticalAlignment="Center" Margin="0,0,6,0" />
                         <Button Content="-" Padding="7,1" FontSize="12" Margin="0,0,4,0" Click="ZoomOut_Click" ToolTip="缩小谱面 (Ctrl + 滚轮向下)" />
-                        <TextBlock x:Name="ZoomPercentText" Text="适应" FontSize="11" FontWeight="SemiBold" Foreground="#334155" VerticalAlignment="Center" MinWidth="56" TextAlignment="Center" />
+                        <TextBlock x:Name="ZoomPercentText" Text="{Binding Practice.ZoomPercentText}" FontSize="11" FontWeight="SemiBold" Foreground="#334155" VerticalAlignment="Center" MinWidth="56" TextAlignment="Center" />
                         <Button Content="+" Padding="7,1" FontSize="12" Margin="4,0,6,0" Click="ZoomIn_Click" ToolTip="放大谱面 (Ctrl + 滚轮向上)" />
                         <Button Content="适应窗口" Padding="7,1" FontSize="11" Click="ZoomFit_Click" ToolTip="自动缩放以完整适应当前窗口宽度" />
                     </StackPanel>
                     <TextBlock x:Name="StatusText"
-                               Text="提示：点击歌词「进唱字位」输入和弦；空白处拖拽可移动页面；顶部可拖动窗口，右下可调整大小。"
+                               Text="{Binding Practice.StatusMessage}"
                                FontSize="11" Foreground="#64748B" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                 </DockPanel>
             </Border>

@@ -96,7 +96,7 @@ public partial class MainWindow
             _autoScrollEngaged = true;
             _autoScrollClock.Restart();
             _autoScrollTimer.Start();
-            AutoScrollToggle.Content = "⏸ 暂停";
+            _vm.Practice.SetAutoScrollState(true);
             AutoScrollToggle.Background = AppDialogs.AccentLightBrush;
             AutoScrollToggle.BorderBrush = AppDialogs.AccentBrush;
             AutoScrollToggle.Foreground = AppDialogs.AccentHoverBrush;
@@ -106,7 +106,7 @@ public partial class MainWindow
         {
             _autoScrollTimer.Stop();
             _autoScrollClock.Stop();
-            AutoScrollToggle.Content = "▶ 滚屏";
+            _vm.Practice.SetAutoScrollState(false);
             AutoScrollToggle.Background = Brushes.White;
             AutoScrollToggle.BorderBrush = AppDialogs.InputBorderBrush;
             AutoScrollToggle.Foreground = AppDialogs.BodyBrush;
@@ -164,9 +164,10 @@ public partial class MainWindow
         if (active)
         {
             var bpm = _selectedSong is { Bpm: >= 30 and <= 240 } ? _selectedSong.Bpm : 80;
-            var (label, beats) = MetronomeMeters[_metronomeMeterIndex];
+            var beats = _vm.Practice.CurrentBeatsPerBar;
+            var label = _vm.Practice.MetronomeMeterLabel;
             _metronome.Start(bpm, beats);
-            MetronomeToggle.Content = $"■ {bpm}";
+            _vm.Practice.SetMetronomeRunning(bpm);
             MetronomeToggle.Background = AppDialogs.AccentLightBrush;
             MetronomeToggle.BorderBrush = AppDialogs.AccentBrush;
             MetronomeToggle.Foreground = AppDialogs.AccentHoverBrush;
@@ -175,32 +176,25 @@ public partial class MainWindow
         else
         {
             _metronome.Stop();
-            MetronomeToggle.Content = "♩ 节拍器";
+            _vm.Practice.SetMetronomeStopped();
             MetronomeToggle.Background = Brushes.White;
             MetronomeToggle.BorderBrush = AppDialogs.InputBorderBrush;
             MetronomeToggle.Foreground = AppDialogs.BodyBrush;
-            if (MetronomeBeatText is not null)
-                MetronomeBeatText.Text = "";
             SetStatus("节拍器已停止。");
         }
     }
 
     private void MetronomeMeter_Click(object sender, RoutedEventArgs e)
     {
-        _metronomeMeterIndex = (_metronomeMeterIndex + 1) % MetronomeMeters.Length;
-        var (label, beats) = MetronomeMeters[_metronomeMeterIndex];
-        if (MetronomeMeterButton is not null)
-            MetronomeMeterButton.Content = label;
+        var (label, beats) = _vm.Practice.CycleMeter();
         _metronome.BeatsPerBar = beats;
         SetStatus($"节拍器拍号已切换为 {label}。");
     }
 
     private void OnMetronomeBeatTick(int beat, int beatsPerBar)
     {
-        if (MetronomeBeatText is null) return;
-        MetronomeBeatText.Text = $"● {beat}/{beatsPerBar}";
-        MetronomeBeatText.Foreground = beat == 1 ? AppDialogs.AccentBrush : AppDialogs.MutedBrush;
-        if (MetronomeToggle is { IsChecked: true })
-            MetronomeToggle.Content = $"■ {_metronome.Bpm}";
+        _vm.Practice.UpdateBeat(beat, beatsPerBar, _metronome.Bpm);
+        if (MetronomeBeatText is not null)
+            MetronomeBeatText.Foreground = beat == 1 ? AppDialogs.AccentBrush : AppDialogs.MutedBrush;
     }
 }
