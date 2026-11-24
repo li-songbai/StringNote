@@ -67,7 +67,7 @@ dotnet build app/Xianpu.Desktop/Xianpu.Desktop.csproj
 pwsh -ExecutionPolicy Bypass -File .\Build.ps1
 
 # 自包含单文件打包（如本机已安装 Inno Setup 6，将同时生成安装包）
-pwsh -ExecutionPolicy Bypass -File .\Build.ps1 -SelfContained -Version 0.1.0-beta.9
+pwsh -ExecutionPolicy Bypass -File .\Build.ps1 -SelfContained -Version 1.0.0
 ```
 
 也可直接双击根目录的 [启动弦谱.cmd](启动弦谱.cmd) 快速启动本地构建产物。
@@ -80,7 +80,7 @@ pwsh -ExecutionPolicy Bypass -File .\Build.ps1 -SelfContained -Version 0.1.0-bet
 
 1. 推送语义化版本标签（`v*`）：
    ```bash
-   git tag v0.1.0-beta.9
+   git tag v1.0.1
    git push origin main --tags
    ```
 2. Actions 将在 `windows-latest` 上自动完成 .NET 10 `win-x64` 单文件发布、便携包压缩、Inno Setup 6 安装包编译，并自动创建 GitHub Release 与 Release Notes。
