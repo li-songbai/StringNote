@@ -38,6 +38,17 @@ public partial class MainWindow : Window
     private readonly List<string> _redoStack = [];
     private string? _currentSongSnapshot;
     private bool _restoringUndo;
+    private readonly MetronomeService _metronome = new();
+    private readonly DispatcherTimer _autoScrollTimer;
+    private readonly Stopwatch _autoScrollClock = new();
+    private bool _autoScrollEngaged;
+    private int _metronomeMeterIndex;
+    private static readonly (string Label, int Beats)[] MetronomeMeters =
+    [
+        ("4/4", 4),
+        ("3/4", 3),
+        ("6/8", 6)
+    ];
 
     private static readonly string[] KeyNames =
     [
@@ -55,6 +66,13 @@ public partial class MainWindow : Window
         InitializeComponent();
         ApplyAdaptiveInitialWindowSize();
         LoadWindowIcon();
+
+        _autoScrollTimer = new DispatcherTimer(DispatcherPriority.Render)
+        {
+            Interval = TimeSpan.FromMilliseconds(30)
+        };
+        _autoScrollTimer.Tick += OnAutoScrollTick;
+        _metronome.BeatTick += OnMetronomeBeatTick;
 
         SourceInitialized += (_, _) =>
         {
@@ -209,11 +227,15 @@ public partial class MainWindow : Window
         if (!_library.Songs.Contains(song))
             _library.Songs.Add(song);
 
+        StopAutoScroll(clearSession: true);
+
         _initializing = true;
         TitleBox.Text = song.Title;
         OriginalKeyBox.Text = song.OriginalKey;
         SelectedKeyBox.Text = song.SelectedKey;
         CapoBox.Text = song.Capo;
+        if (BpmBox is not null)
+            BpmBox.Text = song.Bpm > 0 ? song.Bpm.ToString(CultureInfo.InvariantCulture) : "";
         ColumnModeBox.SelectedValue = song.ColumnMode.ToString(CultureInfo.InvariantCulture);
         ChordDisplayBox.SelectedValue = string.IsNullOrWhiteSpace(song.ChordDisplayMode) ? "name" : song.ChordDisplayMode;
         if (SongCategoryBox is not null)
@@ -221,6 +243,9 @@ public partial class MainWindow : Window
         if (SongFavoriteToggle is not null)
             SongFavoriteToggle.IsChecked = song.Favorite;
         _initializing = false;
+
+        if (_metronome.IsRunning && song.Bpm > 0)
+            _metronome.Bpm = song.Bpm;
 
         UpdateFavoriteToggleVisual();
         UpdateCaptionTitle();
@@ -249,6 +274,7 @@ public partial class MainWindow : Window
             or nameof(SongModel.OriginalKey)
             or nameof(SongModel.SelectedKey)
             or nameof(SongModel.Capo)
+            or nameof(SongModel.Bpm)
             or nameof(SongModel.ChordDisplayMode)
             or nameof(SongModel.ColumnMode)
             or nameof(SongModel.ShowChordGuide)
@@ -2230,6 +2256,18 @@ public partial class MainWindow : Window
     {
         base.OnPreviewKeyDown(e);
 
+        if (e.Key == Key.Space &&
+            _autoScrollEngaged &&
+            Keyboard.Modifiers == ModifierKeys.None &&
+            Keyboard.FocusedElement is not TextBoxBase &&
+            !ChordPopover.IsOpen &&
+            AutoScrollToggle is not null)
+        {
+            AutoScrollToggle.IsChecked = !(AutoScrollToggle.IsChecked == true);
+            e.Handled = true;
+            return;
+        }
+
         if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control &&
             (Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.None)
         {
@@ -2351,6 +2389,7 @@ public partial class MainWindow : Window
             _selectedSong.OriginalKey = restored.OriginalKey;
             _selectedSong.SelectedKey = restored.SelectedKey;
             _selectedSong.Capo = restored.Capo;
+            _selectedSong.Bpm = restored.Bpm;
             _selectedSong.Category = restored.Category;
             _selectedSong.Favorite = restored.Favorite;
             _selectedSong.ChordDisplayMode = restored.ChordDisplayMode;
@@ -2370,6 +2409,8 @@ public partial class MainWindow : Window
             OriginalKeyBox.Text = _selectedSong.OriginalKey;
             SelectedKeyBox.Text = _selectedSong.SelectedKey;
             CapoBox.Text = _selectedSong.Capo;
+            if (BpmBox is not null)
+                BpmBox.Text = _selectedSong.Bpm > 0 ? _selectedSong.Bpm.ToString(CultureInfo.InvariantCulture) : "";
             ColumnModeBox.SelectedValue = _selectedSong.ColumnMode.ToString(CultureInfo.InvariantCulture);
             ChordDisplayBox.SelectedValue = string.IsNullOrWhiteSpace(_selectedSong.ChordDisplayMode) ? "name" : _selectedSong.ChordDisplayMode;
             if (SongCategoryBox is not null)
@@ -2430,6 +2471,204 @@ public partial class MainWindow : Window
         var nextSong = _library.Songs.OrderByDescending(x => x.UpdatedAt).First();
         SelectSong(nextSong);
         SetStatus(statusMessage);
+    }
+
+    private void BpmBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_initializing || _selectedSong is null || BpmBox is null) return;
+        var text = BpmBox.Text.Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            _selectedSong.Bpm = 0;
+            return;
+        }
+        if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) && parsed is >= 30 and <= 240)
+        {
+            _selectedSong.Bpm = parsed;
+            if (_metronome.IsRunning)
+                _metronome.Bpm = parsed;
+        }
+    }
+
+    private void BpmBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_initializing || _selectedSong is null || BpmBox is null) return;
+        var text = BpmBox.Text.Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            _selectedSong.Bpm = 0;
+        }
+        else if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+        {
+            var clamped = Math.Clamp(parsed, 30, 240);
+            _selectedSong.Bpm = clamped;
+            _initializing = true;
+            BpmBox.Text = clamped.ToString(CultureInfo.InvariantCulture);
+            _initializing = false;
+            if (_metronome.IsRunning)
+                _metronome.Bpm = clamped;
+        }
+        else
+        {
+            _initializing = true;
+            BpmBox.Text = _selectedSong.Bpm > 0 ? _selectedSong.Bpm.ToString(CultureInfo.InvariantCulture) : "";
+            _initializing = false;
+        }
+        SaveLibraryQuietly();
+    }
+
+    private void PrintPdf_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedSong is null) return;
+
+        ChordPopover.IsOpen = false;
+        StopAutoScroll(clearSession: false);
+
+        try
+        {
+            var dialog = new PrintDialog();
+            if (dialog.ShowDialog() != true)
+                return;
+
+            var pageSize = new Size(dialog.PrintableAreaWidth, dialog.PrintableAreaHeight);
+            var paginator = ScoreSurface.CreatePrintPaginator(pageSize);
+            var title = string.IsNullOrWhiteSpace(_selectedSong.Title) ? "弦笺曲谱" : _selectedSong.Title.Trim();
+            dialog.PrintDocument(paginator, $"弦笺 - {title}");
+            SetStatus($"已发送打印 / PDF 任务（共 {paginator.PageCount} 页）：{title}");
+        }
+        catch (Exception ex)
+        {
+            AppDialogs.ShowError(this, "打印 / 导出 PDF 失败", ex.Message);
+        }
+    }
+
+    private void AutoScrollToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (AutoScrollToggle is null) return;
+        var active = AutoScrollToggle.IsChecked == true;
+        if (active)
+        {
+            if (ScoreScrollViewer is null || ScoreScrollViewer.ScrollableHeight <= 1.0)
+            {
+                AutoScrollToggle.IsChecked = false;
+                SetStatus("当前曲谱已完整显示在视野内，无需滚屏。");
+                return;
+            }
+
+            if (ScoreScrollViewer.VerticalOffset >= ScoreScrollViewer.ScrollableHeight - 1.0)
+                ScoreScrollViewer.ScrollToTop();
+
+            _autoScrollEngaged = true;
+            _autoScrollClock.Restart();
+            _autoScrollTimer.Start();
+            AutoScrollToggle.Content = "⏸ 暂停";
+            AutoScrollToggle.Background = new SolidColorBrush(Color.FromRgb(234, 243, 237));
+            AutoScrollToggle.BorderBrush = new SolidColorBrush(Color.FromRgb(47, 107, 72));
+            AutoScrollToggle.Foreground = new SolidColorBrush(Color.FromRgb(36, 85, 56));
+            SetStatus("已开启自动滚屏（按 Space 空格键可随时暂停/继续）。");
+        }
+        else
+        {
+            _autoScrollTimer.Stop();
+            _autoScrollClock.Stop();
+            AutoScrollToggle.Content = "▶ 滚屏";
+            AutoScrollToggle.Background = Brushes.White;
+            AutoScrollToggle.BorderBrush = new SolidColorBrush(Color.FromRgb(203, 213, 225));
+            AutoScrollToggle.Foreground = new SolidColorBrush(Color.FromRgb(51, 65, 85));
+            if (_autoScrollEngaged)
+                SetStatus("自动滚屏已暂停（按 Space 空格键可继续）。");
+        }
+    }
+
+    private void StopAutoScroll(bool clearSession)
+    {
+        _autoScrollTimer.Stop();
+        _autoScrollClock.Stop();
+        if (clearSession)
+            _autoScrollEngaged = false;
+        if (AutoScrollToggle is not null && AutoScrollToggle.IsChecked == true)
+            AutoScrollToggle.IsChecked = false;
+    }
+
+    private void OnAutoScrollTick(object? sender, EventArgs e)
+    {
+        if (ScoreScrollViewer is null || AutoScrollToggle?.IsChecked != true)
+        {
+            _autoScrollTimer.Stop();
+            return;
+        }
+
+        var dt = _autoScrollClock.Elapsed.TotalSeconds;
+        _autoScrollClock.Restart();
+        if (dt <= 0 || dt > 0.5)
+            return;
+
+        var speedPxPerSec = 38.0;
+        if (AutoScrollSpeedBox?.SelectedValue is string speedTag &&
+            double.TryParse(speedTag, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedSpeed))
+        {
+            speedPxPerSec = parsedSpeed;
+        }
+
+        var nextOffset = ScoreScrollViewer.VerticalOffset + speedPxPerSec * dt;
+        if (nextOffset >= ScoreScrollViewer.ScrollableHeight)
+        {
+            ScoreScrollViewer.ScrollToVerticalOffset(ScoreScrollViewer.ScrollableHeight);
+            StopAutoScroll(clearSession: true);
+            SetStatus("已滚动至曲谱末尾，自动滚屏已停止。");
+            return;
+        }
+
+        ScoreScrollViewer.ScrollToVerticalOffset(nextOffset);
+    }
+
+    private void MetronomeToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (MetronomeToggle is null) return;
+        var active = MetronomeToggle.IsChecked == true;
+        if (active)
+        {
+            var bpm = _selectedSong is { Bpm: >= 30 and <= 240 } ? _selectedSong.Bpm : 80;
+            var (label, beats) = MetronomeMeters[_metronomeMeterIndex];
+            _metronome.Start(bpm, beats);
+            MetronomeToggle.Content = $"■ {bpm}";
+            MetronomeToggle.Background = new SolidColorBrush(Color.FromRgb(234, 243, 237));
+            MetronomeToggle.BorderBrush = new SolidColorBrush(Color.FromRgb(47, 107, 72));
+            MetronomeToggle.Foreground = new SolidColorBrush(Color.FromRgb(36, 85, 56));
+            SetStatus($"节拍器已开启：{bpm} BPM（{label} 拍）。");
+        }
+        else
+        {
+            _metronome.Stop();
+            MetronomeToggle.Content = "♩ 节拍器";
+            MetronomeToggle.Background = Brushes.White;
+            MetronomeToggle.BorderBrush = new SolidColorBrush(Color.FromRgb(203, 213, 225));
+            MetronomeToggle.Foreground = new SolidColorBrush(Color.FromRgb(51, 65, 85));
+            if (MetronomeBeatText is not null)
+                MetronomeBeatText.Text = "";
+            SetStatus("节拍器已停止。");
+        }
+    }
+
+    private void MetronomeMeter_Click(object sender, RoutedEventArgs e)
+    {
+        _metronomeMeterIndex = (_metronomeMeterIndex + 1) % MetronomeMeters.Length;
+        var (label, beats) = MetronomeMeters[_metronomeMeterIndex];
+        if (MetronomeMeterButton is not null)
+            MetronomeMeterButton.Content = label;
+        _metronome.BeatsPerBar = beats;
+        SetStatus($"节拍器拍号已切换为 {label}。");
+    }
+
+    private void OnMetronomeBeatTick(int beat, int beatsPerBar)
+    {
+        if (MetronomeBeatText is null) return;
+        MetronomeBeatText.Text = $"● {beat}/{beatsPerBar}";
+        MetronomeBeatText.Foreground = beat == 1
+            ? new SolidColorBrush(Color.FromRgb(47, 107, 72))
+            : new SolidColorBrush(Color.FromRgb(100, 116, 139));
+        if (MetronomeToggle is { IsChecked: true })
+            MetronomeToggle.Content = $"■ {_metronome.Bpm}";
     }
 
     private async Task CheckForUpdatesSilentlyAsync()
@@ -2823,6 +3062,8 @@ public partial class MainWindow : Window
 
     private void ExitApplication()
     {
+        StopAutoScroll(clearSession: true);
+        _metronome.Dispose();
         _trayService?.Dispose();
         _trayService = null;
         Application.Current.Shutdown();
@@ -2830,6 +3071,8 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
+        StopAutoScroll(clearSession: true);
+        _metronome.Dispose();
         _trayService?.Dispose();
         _trayService = null;
         base.OnClosing(e);
@@ -2837,6 +3080,8 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        StopAutoScroll(clearSession: true);
+        _metronome.Dispose();
         _trayService?.Dispose();
         _trayService = null;
         base.OnClosed(e);

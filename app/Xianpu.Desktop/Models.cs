@@ -28,6 +28,7 @@ public sealed class SongModel : INotifyPropertyChanged
     private string _originalKey = "";
     private string _selectedKey = "";
     private string _capo = "";
+    private int _bpm;
     private string _category = "未分类";
     private bool _favorite;
     private string _chordDisplayMode = "name";
@@ -40,6 +41,7 @@ public sealed class SongModel : INotifyPropertyChanged
     public string OriginalKey { get => _originalKey; set => Set(ref _originalKey, value); }
     public string SelectedKey { get => _selectedKey; set { if (Set(ref _selectedKey, value)) OnPropertyChanged(nameof(ListSummary)); } }
     public string Capo { get => _capo; set { if (Set(ref _capo, value)) OnPropertyChanged(nameof(ListSummary)); } }
+    public int Bpm { get => _bpm; set => Set(ref _bpm, value); }
     public string Category { get => _category; set { if (Set(ref _category, value)) OnPropertyChanged(nameof(ListSummary)); } }
     public bool Favorite { get => _favorite; set => Set(ref _favorite, value); }
     public string ChordDisplayMode { get => _chordDisplayMode; set => Set(ref _chordDisplayMode, value); }

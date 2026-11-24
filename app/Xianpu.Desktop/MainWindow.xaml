@@ -234,13 +234,20 @@
                         </StackPanel>
 
                         <!-- 4. 变调夹 -->
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2,4,2">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2,8,2">
                             <TextBlock Text="变调夹" FontSize="12" Foreground="#64748B" VerticalAlignment="Center" Margin="0,0,4,0" />
                             <ComboBox x:Name="CapoBox" Width="78" IsEditable="True"
                                       SelectionChanged="CapoBox_SelectionChanged"
                                       TextBoxBase.TextChanged="CapoBox_TextChanged"
                                       LostFocus="KeyBox_LostFocus"
                                       ToolTip="例如：不夹、2 品、4 品" />
+                        </StackPanel>
+
+                        <!-- 5. BPM (可选) -->
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2,4,2">
+                            <TextBlock Text="BPM" FontSize="12" Foreground="#64748B" VerticalAlignment="Center" Margin="0,0,4,0" />
+                            <TextBox x:Name="BpmBox" Width="52" TextChanged="BpmBox_TextChanged" LostFocus="BpmBox_LostFocus"
+                                     ToolTip="可选拍速（30~240），留空则不在谱头显示；可配合底部节拍器使用" />
                         </StackPanel>
                     </WrapPanel>
 
@@ -257,6 +264,7 @@
                         <Button Content="导出谱子" Click="SaveProject_Click" Margin="0,2,5,2" ToolTip="导出为 .xianpu.json 可编辑曲谱文件，发给好友即可在同款软件中导入继续编辑" />
                         <Button x:Name="SettingsButton" Content="设置与备份" Click="Settings_Click" Margin="0,2,5,2" ToolTip="自定义曲库数据目录、查看自动历史快照、导出或恢复整库备份" />
                         <Button x:Name="CheckUpdateButton" Content="检查更新" Click="CheckUpdate_Click" Margin="0,2,8,2" ToolTip="检查 GitHub 最新版本" />
+                        <Button Content="打印 / PDF" Click="PrintPdf_Click" Margin="0,2,5,2" ToolTip="分页打印 A4 曲谱，或选择 Microsoft Print to PDF 导出高清矢量 PDF" />
                         <Button Content="导出图片 (PNG)" Style="{StaticResource PrimaryButton}" Padding="12,5" Margin="0,2,0,2" Click="ExportPng_Click" ToolTip="将当前曲谱导出为高清 PNG 图片" />
                     </WrapPanel>
                 </WrapPanel>
@@ -524,10 +532,40 @@
                 </Popup>
             </Grid>
 
-            <!-- Row 4: Compact Bottom Status & Zoom Bar -->
+            <!-- Row 4: Compact Bottom Status, Practice Controls (Auto-Scroll / Metronome) & Zoom Bar -->
             <Border Grid.Row="4" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="0,1,0,0" Padding="12,4">
                 <DockPanel LastChildFill="True">
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
+                        <!-- Practice: Auto-Scroll (Teleprompter) -->
+                        <ToggleButton x:Name="AutoScrollToggle" Content="▶ 滚屏" Padding="7,1" FontSize="11" Margin="0,0,4,0"
+                                      Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" Foreground="#334155" Cursor="Hand"
+                                      Checked="AutoScrollToggle_Changed" Unchecked="AutoScrollToggle_Changed"
+                                      ToolTip="开启/暂停自动滚屏看谱（滚屏激活时按 Space 空格键可随时暂停/继续）" />
+                        <ComboBox x:Name="AutoScrollSpeedBox" Width="54" FontSize="11" Padding="4,1" Margin="0,0,8,0"
+                                  SelectedIndex="2" SelectedValuePath="Tag"
+                                  ToolTip="调整自动滚屏速度">
+                            <ComboBoxItem Content="极慢" Tag="14" />
+                            <ComboBoxItem Content="慢速" Tag="24" />
+                            <ComboBoxItem Content="中速" Tag="38" />
+                            <ComboBoxItem Content="较快" Tag="54" />
+                            <ComboBoxItem Content="快速" Tag="74" />
+                        </ComboBox>
+
+                        <Border Width="1" Height="14" Background="#CBD5E1" Margin="0,0,8,0" />
+
+                        <!-- Practice: Metronome -->
+                        <ToggleButton x:Name="MetronomeToggle" Content="♩ 节拍器" Padding="7,1" FontSize="11" Margin="0,0,4,0"
+                                      Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" Foreground="#334155" Cursor="Hand"
+                                      Checked="MetronomeToggle_Changed" Unchecked="MetronomeToggle_Changed"
+                                      ToolTip="开启/关闭内置节拍器（自动使用谱头 BPM，未填时默认 80 BPM）" />
+                        <Button x:Name="MetronomeMeterButton" Content="4/4" Padding="6,1" FontSize="11" Margin="0,0,4,0"
+                                Click="MetronomeMeter_Click" ToolTip="点击切换节拍器拍号（4/4 / 3/4 / 6/8）" />
+                        <TextBlock x:Name="MetronomeBeatText" Text="" FontSize="11" FontWeight="Bold" Foreground="#2F6B48"
+                                   VerticalAlignment="Center" MinWidth="28" Margin="0,0,8,0" />
+
+                        <Border Width="1" Height="14" Background="#CBD5E1" Margin="0,0,8,0" />
+
+                        <!-- Zoom -->
                         <TextBlock Text="谱面缩放" FontSize="11" Foreground="#64748B" VerticalAlignment="Center" Margin="0,0,6,0" />
                         <Button Content="-" Padding="7,1" FontSize="12" Margin="0,0,4,0" Click="ZoomOut_Click" ToolTip="缩小谱面 (Ctrl + 滚轮向下)" />
                         <TextBlock x:Name="ZoomPercentText" Text="适应" FontSize="11" FontWeight="SemiBold" Foreground="#334155" VerticalAlignment="Center" MinWidth="56" TextAlignment="Center" />

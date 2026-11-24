@@ -36,6 +36,7 @@ StringNote/
 │   ├── AiScoreImporter.cs       # AI 识谱 Prompt 模板（弹唱谱 / 指弹谱）与容错 JSON 解析器
 │   ├── AiImportDialog.cs        # AI 识谱导入引导弹窗（一键复制 Prompt → 粘贴 JSON 导入/追加）
 │   ├── SettingsDialog.cs        # 设置与曲库备份弹窗（自定义数据目录、自动历史快照、整库导出/恢复）
+│   ├── MetronomeService.cs      # 零依赖内置节拍器（内存合成木鱼音效 + 防漂移节拍调度）
 │   ├── AppDialogs.cs            # 统一卡片式无边框弹窗工厂与设计令牌（颜色、按钮、圆角、阴影）
 │   ├── TrayService.cs           # Windows 系统托盘图标与最小化驻留服务
 │   ├── UpdateService.cs         # 基于 GitHub Releases API 的自动检查更新与静默覆盖安装
