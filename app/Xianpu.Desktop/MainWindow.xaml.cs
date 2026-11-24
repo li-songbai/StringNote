@@ -322,6 +322,7 @@ public partial class MainWindow : Window
     {
         if (_initializing || _selectedSong is null) return;
         if (e.PropertyName is nameof(SongModel.Title)
+            or nameof(SongModel.Artist)
             or nameof(SongModel.OriginalKey)
             or nameof(SongModel.SelectedKey)
             or nameof(SongModel.Capo)

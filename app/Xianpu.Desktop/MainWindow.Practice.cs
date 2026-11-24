@@ -233,9 +233,6 @@ public partial class MainWindow
             _autoScrollClock.Restart();
             _autoScrollTimer.Start();
             _vm.Practice.SetAutoScrollState(true);
-            AutoScrollToggle.Background = AppDialogs.AccentLightBrush;
-            AutoScrollToggle.BorderBrush = AppDialogs.AccentBrush;
-            AutoScrollToggle.Foreground = AppDialogs.AccentHoverBrush;
             SetStatus("已开启自动滚屏（按 Space 空格键可随时暂停/继续）。");
         }
         else
@@ -243,9 +240,6 @@ public partial class MainWindow
             _autoScrollTimer.Stop();
             _autoScrollClock.Stop();
             _vm.Practice.SetAutoScrollState(false);
-            AutoScrollToggle.Background = Brushes.White;
-            AutoScrollToggle.BorderBrush = AppDialogs.InputBorderBrush;
-            AutoScrollToggle.Foreground = AppDialogs.BodyBrush;
             if (_autoScrollEngaged)
                 SetStatus("自动滚屏已暂停（按 Space 空格键可继续）。");
         }
@@ -304,18 +298,12 @@ public partial class MainWindow
             var label = _vm.Practice.MetronomeMeterLabel;
             _metronome.Start(bpm, beats);
             _vm.Practice.SetMetronomeRunning(bpm);
-            MetronomeToggle.Background = AppDialogs.AccentLightBrush;
-            MetronomeToggle.BorderBrush = AppDialogs.AccentBrush;
-            MetronomeToggle.Foreground = AppDialogs.AccentHoverBrush;
             SetStatus($"节拍器已开启：{bpm} BPM（{label} 拍）。");
         }
         else
         {
             _metronome.Stop();
             _vm.Practice.SetMetronomeStopped();
-            MetronomeToggle.Background = Brushes.White;
-            MetronomeToggle.BorderBrush = AppDialogs.InputBorderBrush;
-            MetronomeToggle.Foreground = AppDialogs.BodyBrush;
             SetStatus("节拍器已停止。");
         }
     }

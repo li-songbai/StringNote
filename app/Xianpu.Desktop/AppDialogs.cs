@@ -512,6 +512,8 @@ internal static class AppDialogs
             btn.Background = AccentBrush;
             btn.Foreground = Brushes.White;
             btn.BorderBrush = AccentBrush;
+            btn.BorderThickness = new Thickness(1);
+            btn.Template = BuildRoundedButtonTemplate(AccentHoverBrush, cornerRadius: 7);
         }
         return btn;
     }
@@ -529,6 +531,14 @@ internal static class AppDialogs
         if (owner?.TryFindResource(typeof(Button)) is Style baseStyle)
         {
             btn.Style = baseStyle;
+        }
+        else
+        {
+            btn.Background = Brushes.White;
+            btn.Foreground = TitleBrush;
+            btn.BorderBrush = InputBorderBrush;
+            btn.BorderThickness = new Thickness(1);
+            btn.Template = BuildRoundedButtonTemplate(Freeze(new SolidColorBrush(Color.FromRgb(244, 246, 248))), cornerRadius: 7);
         }
         return btn;
     }
@@ -553,6 +563,8 @@ internal static class AppDialogs
             btn.Background = AccentLightBrush;
             btn.Foreground = AccentHoverBrush;
             btn.BorderBrush = Freeze(new SolidColorBrush(Color.FromRgb(148, 191, 164)));
+            btn.BorderThickness = new Thickness(1);
+            btn.Template = BuildRoundedButtonTemplate(Freeze(new SolidColorBrush(Color.FromRgb(220, 236, 225))), cornerRadius: 7);
         }
         return btn;
     }

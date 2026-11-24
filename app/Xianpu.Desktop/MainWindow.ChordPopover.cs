@@ -37,13 +37,16 @@ public partial class MainWindow
                 Content = chordName,
                 Tag = chordName,
                 Style = (Style)FindResource("ChordChipButton"),
-                Background = isSelected ? new SolidColorBrush(Color.FromRgb(47, 107, 72)) : new SolidColorBrush(Color.FromRgb(248, 250, 252)),
-                Foreground = isSelected ? Brushes.White : new SolidColorBrush(Color.FromRgb(36, 85, 56)),
-                BorderBrush = isSelected ? new SolidColorBrush(Color.FromRgb(47, 107, 72)) : new SolidColorBrush(Color.FromRgb(203, 213, 225)),
                 ToolTip = ScoreSurface?.ContinuousPaintMode == true
                     ? $"选中 {chordName} 后，可连续点击歌词字位放置（右键可自定义指法）"
                     : $"将 {chordName} 填入当前光标字位（右键可自定义指法{(isCustom ? "或移除" : "")}）"
             };
+            if (isSelected)
+            {
+                btn.Background = new SolidColorBrush(Color.FromRgb(47, 107, 72));
+                btn.Foreground = Brushes.White;
+                btn.BorderBrush = new SolidColorBrush(Color.FromRgb(47, 107, 72));
+            }
 
             var menu = new ContextMenu();
             var editShapeItem = new MenuItem { Header = $"自定义「{chordName}」左手按法..." };
@@ -193,15 +196,6 @@ public partial class MainWindow
         if (enabled && LyricEditModeToggle?.IsChecked == true)
             LyricEditModeToggle.IsChecked = false;
         ScoreSurface.ContinuousPaintMode = enabled;
-        ContinuousPaintToggle.Background = enabled
-            ? new SolidColorBrush(Color.FromRgb(234, 243, 237))
-            : Brushes.White;
-        ContinuousPaintToggle.BorderBrush = enabled
-            ? new SolidColorBrush(Color.FromRgb(47, 107, 72))
-            : new SolidColorBrush(Color.FromRgb(203, 213, 225));
-        ContinuousPaintToggle.Foreground = enabled
-            ? new SolidColorBrush(Color.FromRgb(36, 85, 56))
-            : new SolidColorBrush(Color.FromRgb(51, 65, 85));
 
         if (!enabled)
         {

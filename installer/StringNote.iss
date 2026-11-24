@@ -1,5 +1,5 @@
 ﻿#ifndef AppVersion
-  #define AppVersion "1.0.1"
+  #define AppVersion "1.0.2"
 #endif
 #ifndef PublishDir
   #define PublishDir "..\app\Xianpu.Desktop\bin\Release\net10.0-windows\win-x64\publish"

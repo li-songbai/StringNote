@@ -399,9 +399,20 @@ public partial class MainWindow
         UpdateViewportScale();
     }
 
+    private bool _closingCommitted;
+
+    private void CommitPendingEditsBeforeExit()
+    {
+        if (_closingCommitted) return;
+        _closingCommitted = true;
+        CommitInlineLyricEdit(refocusSurface: false);
+        CommitFields();
+        FlushPendingHeaderSave();
+    }
+
     private void ExitApplication()
     {
-        FlushPendingHeaderSave();
+        CommitPendingEditsBeforeExit();
         StopAutoScroll(clearSession: true);
         _metronome.Dispose();
         _trayService?.Dispose();
@@ -411,7 +422,7 @@ public partial class MainWindow
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        FlushPendingHeaderSave();
+        CommitPendingEditsBeforeExit();
         StopAutoScroll(clearSession: true);
         _metronome.Dispose();
         _trayService?.Dispose();

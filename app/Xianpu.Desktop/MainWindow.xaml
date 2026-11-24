@@ -16,114 +16,19 @@
     </WindowChrome.WindowChrome>
 
     <Window.Resources>
-        <SolidColorBrush x:Key="Accent" Color="#2F6B48" />
-        <SolidColorBrush x:Key="AccentHover" Color="#245538" />
-        <SolidColorBrush x:Key="AccentLight" Color="#EAF3ED" />
-        <SolidColorBrush x:Key="BorderBrushStd" Color="#D5DCE4" />
-
-        <Style TargetType="Button">
-            <Setter Property="Padding" Value="9,5" />
-            <Setter Property="HorizontalContentAlignment" Value="Center" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="Background" Value="#FFFFFF" />
-            <Setter Property="Foreground" Value="#1E293B" />
-            <Setter Property="BorderBrush" Value="#D5DCE4" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="7" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="#F4F6F8" />
-                                <Setter TargetName="Chrome" Property="BorderBrush" Value="#B4C0CC" />
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Chrome" Property="Opacity" Value="0.82" />
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="Chrome" Property="Opacity" Value="0.42" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style TargetType="ToggleButton">
-            <Setter Property="Padding" Value="9,5" />
-            <Setter Property="HorizontalContentAlignment" Value="Center" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="Background" Value="#FFFFFF" />
-            <Setter Property="Foreground" Value="#334155" />
-            <Setter Property="BorderBrush" Value="#D5DCE4" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ToggleButton">
-                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="7" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="#F4F6F8" />
-                                <Setter TargetName="Chrome" Property="BorderBrush" Value="#B4C0CC" />
-                            </Trigger>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="#EAF3ED" />
-                                <Setter TargetName="Chrome" Property="BorderBrush" Value="#94BFA4" />
-                                <Setter Property="Foreground" Value="#245538" />
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Chrome" Property="Opacity" Value="0.82" />
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="Chrome" Property="Opacity" Value="0.42" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Background" Value="#2F6B48" />
-            <Setter Property="Foreground" Value="#FFFFFF" />
-            <Setter Property="BorderBrush" Value="#2F6B48" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#245538" />
-                    <Setter Property="BorderBrush" Value="#245538" />
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
-        <Style x:Key="AccentOutlineButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Background" Value="#EAF3ED" />
-            <Setter Property="Foreground" Value="#245538" />
-            <Setter Property="BorderBrush" Value="#94BFA4" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#DCECE1" />
-                    <Setter Property="BorderBrush" Value="#2F6B48" />
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
         <Style x:Key="TopBarGhostButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="Transparent" />
             <Setter Property="Foreground" Value="#334155" />
             <Setter Property="Padding" Value="9,5" />
             <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#EEF2F6" />
+                    <Setter Property="BorderBrush" Value="#E2E8F0" />
+                    <Setter Property="Foreground" Value="#0F172A" />
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <Style x:Key="ChordChipButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
@@ -134,6 +39,12 @@
             <Setter Property="Background" Value="#F8FAF8" />
             <Setter Property="Foreground" Value="#245538" />
             <Setter Property="BorderBrush" Value="#DCE5DF" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#EAF3ED" />
+                    <Setter Property="BorderBrush" Value="#94BFA4" />
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <Style x:Key="CaptionControlButton" TargetType="Button">
@@ -186,29 +97,6 @@
             </Setter>
         </Style>
 
-        <Style TargetType="TextBox">
-            <Setter Property="Padding" Value="7,4" />
-            <Setter Property="Background" Value="#FFFFFF" />
-            <Setter Property="BorderBrush" Value="#D5DCE4" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="FontSize" Value="12.5" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="TextBox">
-                        <Border x:Name="Border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
-                            <ScrollViewer x:Name="PART_ContentHost" Margin="0" VerticalAlignment="Center" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Border" Property="BorderBrush" Value="#2F6B48" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
         <Style x:Key="InlineTitleBoxStyle" TargetType="TextBox">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="Transparent" />
@@ -247,150 +135,6 @@
             <Setter Property="Foreground" Value="#1E293B" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Padding" Value="2,1" />
-        </Style>
-
-        <Style TargetType="ComboBoxItem">
-            <Setter Property="Padding" Value="8,5" />
-            <Setter Property="Margin" Value="0,1" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="Foreground" Value="#1E293B" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ComboBoxItem">
-                        <Border x:Name="ItemBg" Background="Transparent" CornerRadius="5" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter VerticalAlignment="Center" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="ItemBg" Property="Background" Value="#F1F5F9" />
-                            </Trigger>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="ItemBg" Property="Background" Value="#EAF3ED" />
-                                <Setter Property="Foreground" Value="#245538" />
-                                <Setter Property="FontWeight" Value="SemiBold" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style TargetType="ComboBox">
-            <Setter Property="Padding" Value="8,3" />
-            <Setter Property="Background" Value="#FFFFFF" />
-            <Setter Property="Foreground" Value="#1E293B" />
-            <Setter Property="BorderBrush" Value="#D5DCE4" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
-            <Setter Property="SnapsToDevicePixels" Value="True" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ComboBox">
-                        <Grid x:Name="MainGrid">
-                            <Border x:Name="OuterBorder"
-                                    Background="{TemplateBinding Background}"
-                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                    CornerRadius="6">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="20" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <!-- Full-surface clickable ToggleButton for non-editable ComboBox -->
-                                    <ToggleButton x:Name="DropDownToggle" Grid.ColumnSpan="2"
-                                                  Focusable="False"
-                                                  ClickMode="Press"
-                                                  IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
-                                                  Cursor="Hand">
-                                        <ToggleButton.Template>
-                                            <ControlTemplate TargetType="ToggleButton">
-                                                <Border Background="Transparent">
-                                                    <Path Data="M 0,0 L 3.5,3.8 L 7,0"
-                                                          Stroke="#64748B" StrokeThickness="1.4"
-                                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
-                                                          HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                          Margin="0,0,7,0" />
-                                                </Border>
-                                            </ControlTemplate>
-                                        </ToggleButton.Template>
-                                    </ToggleButton>
-
-                                    <!-- Display Content for non-editable ComboBox -->
-                                    <ContentPresenter x:Name="ContentSite" Grid.Column="0"
-                                                      IsHitTestVisible="False"
-                                                      Content="{TemplateBinding SelectionBoxItem}"
-                                                      ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
-                                                      ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
-                                                      Margin="{TemplateBinding Padding}"
-                                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                                      HorizontalAlignment="Left" />
-
-                                    <!-- Editable TextBox (only visible when IsEditable=True) -->
-                                    <TextBox x:Name="PART_EditableTextBox" Grid.Column="0"
-                                             Visibility="Collapsed"
-                                             Background="Transparent"
-                                             BorderThickness="0"
-                                             Foreground="{TemplateBinding Foreground}"
-                                             FontSize="{TemplateBinding FontSize}"
-                                             FontWeight="{TemplateBinding FontWeight}"
-                                             Padding="{TemplateBinding Padding}"
-                                             VerticalContentAlignment="Center"
-                                             IsReadOnly="{TemplateBinding IsReadOnly}" />
-                                </Grid>
-                            </Border>
-
-                            <Popup x:Name="PART_Popup"
-                                   AllowsTransparency="True"
-                                   Placement="Bottom"
-                                   PlacementTarget="{Binding ElementName=OuterBorder}"
-                                   VerticalOffset="4"
-                                   IsOpen="{TemplateBinding IsDropDownOpen}"
-                                   PopupAnimation="Fade"
-                                   Focusable="False">
-                                <Border Background="#FFFFFF"
-                                        BorderBrush="#CBD5E1"
-                                        BorderThickness="1"
-                                        CornerRadius="8"
-                                        Padding="4"
-                                        Margin="0,0,6,8"
-                                        MinWidth="{Binding ActualWidth, ElementName=OuterBorder}"
-                                        MaxHeight="{TemplateBinding MaxDropDownHeight}">
-                                    <Border.Effect>
-                                        <DropShadowEffect BlurRadius="14" ShadowDepth="3" Opacity="0.12" Color="#0F172A" />
-                                    </Border.Effect>
-                                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
-                                    </ScrollViewer>
-                                </Border>
-                            </Popup>
-                        </Grid>
-
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsEditable" Value="True">
-                                <Setter TargetName="ContentSite" Property="Visibility" Value="Collapsed" />
-                                <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible" />
-                                <Setter TargetName="DropDownToggle" Property="Grid.Column" Value="1" />
-                                <Setter TargetName="DropDownToggle" Property="Grid.ColumnSpan" Value="1" />
-                            </Trigger>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="OuterBorder" Property="BorderBrush" Value="#94BFA4" />
-                            </Trigger>
-                            <Trigger Property="IsDropDownOpen" Value="True">
-                                <Setter TargetName="OuterBorder" Property="BorderBrush" Value="#2F6B48" />
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="OuterBorder" Property="Opacity" Value="0.45" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
     </Window.Resources>
 

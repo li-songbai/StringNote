@@ -28,16 +28,6 @@ public partial class MainWindow
         if (WorkspaceSplitter is not null)
             WorkspaceSplitter.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
 
-        LibraryToggle.Background = open
-            ? new SolidColorBrush(Color.FromRgb(234, 243, 237))
-            : Brushes.White;
-        LibraryToggle.BorderBrush = open
-            ? new SolidColorBrush(Color.FromRgb(148, 191, 164))
-            : new SolidColorBrush(Color.FromRgb(203, 213, 225));
-        LibraryToggle.Foreground = open
-            ? new SolidColorBrush(Color.FromRgb(36, 85, 56))
-            : new SolidColorBrush(Color.FromRgb(51, 65, 85));
-
         UpdateViewportScale();
         Dispatcher.BeginInvoke(DispatcherPriority.Loaded, UpdateViewportScale);
     }
@@ -138,13 +128,31 @@ public partial class MainWindow
     {
         if (LibraryAllFilterButton is null || LibraryFavFilterButton is null) return;
 
-        LibraryAllFilterButton.Background = !_favoritesOnly ? new SolidColorBrush(Color.FromRgb(234, 243, 237)) : Brushes.White;
-        LibraryAllFilterButton.BorderBrush = !_favoritesOnly ? new SolidColorBrush(Color.FromRgb(47, 107, 72)) : new SolidColorBrush(Color.FromRgb(203, 213, 225));
-        LibraryAllFilterButton.Foreground = !_favoritesOnly ? new SolidColorBrush(Color.FromRgb(36, 85, 56)) : new SolidColorBrush(Color.FromRgb(51, 65, 85));
+        if (!_favoritesOnly)
+        {
+            LibraryAllFilterButton.Background = new SolidColorBrush(Color.FromRgb(234, 243, 237));
+            LibraryAllFilterButton.BorderBrush = new SolidColorBrush(Color.FromRgb(47, 107, 72));
+            LibraryAllFilterButton.Foreground = new SolidColorBrush(Color.FromRgb(36, 85, 56));
+        }
+        else
+        {
+            LibraryAllFilterButton.ClearValue(Control.BackgroundProperty);
+            LibraryAllFilterButton.ClearValue(Control.BorderBrushProperty);
+            LibraryAllFilterButton.ClearValue(Control.ForegroundProperty);
+        }
 
-        LibraryFavFilterButton.Background = _favoritesOnly ? new SolidColorBrush(Color.FromRgb(254, 243, 199)) : Brushes.White;
-        LibraryFavFilterButton.BorderBrush = _favoritesOnly ? new SolidColorBrush(Color.FromRgb(217, 119, 6)) : new SolidColorBrush(Color.FromRgb(203, 213, 225));
-        LibraryFavFilterButton.Foreground = _favoritesOnly ? new SolidColorBrush(Color.FromRgb(180, 83, 9)) : new SolidColorBrush(Color.FromRgb(51, 65, 85));
+        if (_favoritesOnly)
+        {
+            LibraryFavFilterButton.Background = new SolidColorBrush(Color.FromRgb(254, 243, 199));
+            LibraryFavFilterButton.BorderBrush = new SolidColorBrush(Color.FromRgb(217, 119, 6));
+            LibraryFavFilterButton.Foreground = new SolidColorBrush(Color.FromRgb(180, 83, 9));
+        }
+        else
+        {
+            LibraryFavFilterButton.ClearValue(Control.BackgroundProperty);
+            LibraryFavFilterButton.ClearValue(Control.BorderBrushProperty);
+            LibraryFavFilterButton.ClearValue(Control.ForegroundProperty);
+        }
     }
 
     private void SaveToLibrary_Click(object sender, RoutedEventArgs e)
@@ -293,9 +301,18 @@ public partial class MainWindow
         if (SongFavoriteToggle is null) return;
         var fav = SongFavoriteToggle.IsChecked == true;
         SongFavoriteToggle.Content = fav ? "★ 已收藏" : "☆ 收藏";
-        SongFavoriteToggle.Background = fav ? new SolidColorBrush(Color.FromRgb(254, 243, 199)) : Brushes.White;
-        SongFavoriteToggle.BorderBrush = fav ? new SolidColorBrush(Color.FromRgb(217, 119, 6)) : new SolidColorBrush(Color.FromRgb(203, 213, 225));
-        SongFavoriteToggle.Foreground = fav ? new SolidColorBrush(Color.FromRgb(180, 83, 9)) : new SolidColorBrush(Color.FromRgb(71, 85, 105));
+        if (fav)
+        {
+            SongFavoriteToggle.Background = new SolidColorBrush(Color.FromRgb(254, 243, 199));
+            SongFavoriteToggle.BorderBrush = new SolidColorBrush(Color.FromRgb(217, 119, 6));
+            SongFavoriteToggle.Foreground = new SolidColorBrush(Color.FromRgb(180, 83, 9));
+        }
+        else
+        {
+            SongFavoriteToggle.ClearValue(Control.BackgroundProperty);
+            SongFavoriteToggle.ClearValue(Control.BorderBrushProperty);
+            SongFavoriteToggle.ClearValue(Control.ForegroundProperty);
+        }
     }
 
     private void RenameSong_Click(object sender, RoutedEventArgs e)

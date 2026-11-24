@@ -36,16 +36,6 @@ public partial class MainWindow
         ScoreSurface.LyricEditMode = enabled;
         ScoreSurface.InvalidateVisual();
 
-        LyricEditModeToggle.Background = enabled
-            ? new SolidColorBrush(Color.FromRgb(234, 243, 237))
-            : Brushes.White;
-        LyricEditModeToggle.BorderBrush = enabled
-            ? new SolidColorBrush(Color.FromRgb(47, 107, 72))
-            : new SolidColorBrush(Color.FromRgb(203, 213, 225));
-        LyricEditModeToggle.Foreground = enabled
-            ? new SolidColorBrush(Color.FromRgb(36, 85, 56))
-            : new SolidColorBrush(Color.FromRgb(51, 65, 85));
-
         if (!_initializing)
         {
             SetStatus(enabled
