@@ -1,62 +1,86 @@
-# 弦笺 · StringNote：吉他歌词与左手和弦记谱工具
+# 弦笺 · StringNote
 
-**弦笺 (StringNote)** 是一个面向 Windows 的轻量原生桌面制谱工具，专注于**导入 LRC 歌词 → 在进唱字位上方标记左手和弦 → 导出紧凑高清曲谱图片 (PNG)** 的极简工作流。
+**弦笺 (StringNote)** 是一款面向 Windows 的轻量原生吉他记谱桌面应用，专注于**弹唱谱与指弹六线谱的极简制作、排版与高清导出**。
 
-## 核心特点
+🌐 **项目主页**：[https://li-songbai.github.io/StringNote/](https://li-songbai.github.io/StringNote/)  
+📦 **最新版下载**：[GitHub Releases](https://github.com/li-songbai/StringNote/releases)
 
-- **可折叠本地曲库管理**：左上角点击 `曲库 (N)` 按钮可随时展开或收起左侧曲库抽屉（收起后谱面自动占满全宽）。支持**按歌名、调号、分类或歌词关键词实时搜索**、**全部 / ★ 收藏筛选**、**自定义分类管理（`+ 分类`）**，以及一键**新建、保存、创建副本、重命名、批量改词、删除**曲谱，所有修改自动持久化到本地曲库。
-- **单页流式排版**：默认采用**合行紧凑**排版，从头到尾顺序排布并自动将 2~3 句短歌词放在同一行内（也提供**逐句单行**与**双栏对照**选项），避免导出长图过长或分太多页。
-- **简洁谱头信息**：仅保留最核心的四项信息——**歌曲名称、原调、选调、变调夹**，修改后实时同步到谱面。
-- **智能 LRC 歌词导入**：自动识别 UTF-8 / GBK / GB18030 编码，提取 `[ti:]` 歌名与 `原调/选调/变调夹` 信息，自动过滤作词/作曲/编曲等制作人员行，并清理句中逐字时间戳。支持直接把 `.lrc` / `.txt` / `.xianpu.json` 拖入窗口打开。
-- **高效左手和弦标记（放在歌词上方进唱的地方）**：
-  - **点击字位直接输入或点选**：单击任意歌词字位，字位正上方即弹出轻量输入框与本调常用和弦按钮，可直接键入任意和弦（如 `C`、`Am7`、`Fmaj7`、`G/B`、`D/F#`、`Bm7-5`、`Cadd9` 等）按 `Enter` 确认，或单击常用和弦一键填入。
-  - **纯键盘快速走位填谱**：在谱面上使用方向键 `←` `→` `↑` `↓` 移动进唱字位，直接按字母键 `A`–`G` 即可呼出和弦输入；在输入框中按 `Tab` / `Shift+Tab` 可边填边跳到下一字位。
-  - **连点填谱模式**：开启工具栏“✎ 连点填谱”后，点选一个常用和弦即可在歌词不同位置连续点击批量放置。
-  - **自由拖动与移调**：已放置的和弦可直接鼠标拖拽到其他进唱字位（自动覆盖目标字位），支持全谱 `♭-1` / `♯+1` 半音升降调与指定调名批量移调。
+---
 
-## 安装与自动更新
+## 核心特性
 
-### 1. 安装包安装（推荐）
-前往项目的 **GitHub Releases** 下载最新版安装程序 `StringNote-Setup-<version>.exe`：
-- 安装包采用每用户（Per-User）静默权限模式，默认安装到 `%LocalAppData%\Programs\StringNote`，**无需管理员 UAC 弹窗**。
-- 自动创建开始菜单与桌面快捷方式 `弦笺 (StringNote)`，并关联 `.xianpu.json` 曲谱文件双击打开。
-- 支持通过应用内 GitHub Releases 检查更新，自动下载安装包并静默覆盖更新后重启应用。
+### 1. 智能导入与 AI 识谱
+- **AI 识谱导入**：内置「弹唱谱（歌词 + 和弦）」与「指弹谱（纯六线谱 / 多页）」两套专属 Prompt。一键复制 Prompt 连同曲谱图片发给任意多模态 AI，将返回的 JSON 直接粘贴即可自动解析导入，支持新建曲谱或追加到当前曲谱。
+- **LRC / 文本歌词导入**：自动识别 UTF-8 / GBK / GB18030 编码，提取 `[ti:]` 歌名与 `原调 / 选调 / 变调夹` 信息，自动过滤作词/作曲/编曲等制作人员行并清理逐字时间戳。
+- **拖拽即开**：支持直接将 `.lrc`、`.txt`、`.xianpu.json` 文件拖入主窗口打开。
 
-### 2. 免安装便携版
-下载 `StringNote-Portable-win-x64-<version>.zip`，完整解压后直接运行 `Xianpu.Desktop.exe` 或 `Start-Xianpu.cmd` 即可使用（自包含 .NET 运行时，无需额外安装环境）。
+### 2. 高效左手和弦记谱与自定义指法
+- **点字即填**：单击任意歌词字位，正上方弹出轻量输入框与本调常用和弦快捷按钮，支持键入任意和弦（如 `C`、`Am7`、`Fmaj7`、`G/B`、`D/F#`、`Bm7-5`、`Cadd9` 等）回车确认。
+- **纯键盘高速走位**：在谱面使用方向键 `←` `→` `↑` `↓` 移动进唱字位，直接按 `A`–`G` 呼出输入；按 `Tab` / `Shift+Tab` 连续跳字填谱。
+- **连点填谱 & 自由拖拽**：开启「连点填谱」可批量放置同一和弦；已放置的和弦可直接拖拽到其他进唱字位，支持字上与字前定位。
+- **按调自定义和弦与指法图**：支持按调号新增常用和弦，并可视化编辑六弦指法图（品位、指法编号、起始品），自动保存到本地曲库。
+- **一键移调**：支持全谱 `♭-1` / `♯+1` 半音升降调，或直接按目标调名批量移调，保留全部换和弦位置。
+- **和弦名 / 指法图切换**：支持在谱面上自由切换显示纯和弦名、六弦指法图及顶部和弦一览。
 
-## 启动与本地构建
+### 3. 可选六线谱（TAB）与演奏技巧
+- **独立六线谱编辑器**：可为歌曲添加**前奏、间奏、尾奏**或任意段落后的六线谱区块，支持自定义拍号、小节列数、反复记号、节奏符干与休止符。
+- **丰富的演奏技巧标注**：支持扫弦方向（下扫/上扫/切音/琶音）、制音（P.M.）、击弦（H）、勾弦（P）、滑音（S / 滑入 / 滑出）、延音线、倚音、推弦/释放、自然与人工泛音、揉弦、闷音等。
+- **联动编辑（Ripple Editing）**：编辑小节和音符时保持节奏对齐，并可在主谱面与导出 PNG 中所见即所得呈现。
 
-直接双击根目录的 `启动弦谱.cmd` 或编译产物中的 `Xianpu.Desktop.exe` 即可运行。
+### 4. 段落编排与多段叠行排版
+- **自动段落识别与编排**：内置段落结构分析，支持标记前奏、主歌、副歌、桥段、尾奏及反复次数，并可随时调整顺序或插入引用段落。
+- **多段歌词叠行**：针对主歌 1 / 主歌 2 旋律与和弦相同的曲目，支持叠行显示多段歌词并提供专用对齐编辑器，大幅节省页面空间。
+- **单页流式紧凑排版**：默认智能合行紧凑排布，同时提供**自动双栏 / 单栏 / 双栏对照**切换，避免导出长图过长。
 
-在源码目录构建：
+### 5. 本地曲库、分享与原生桌面体验
+- **可折叠本地曲库**：支持按歌名、调号、分类或歌词关键词实时搜索，支持 `★ 收藏`、自定义分类、新建/副本/重命名/批量改词/删除，数据自动持久化至 `%LocalAppData%\Xianpu\library.json`。
+- **高清 PNG 与曲谱分享**：一键导出高清无选中框曲谱图片，也支持导出/导入 `.xianpu.json` 单曲项目与朋友分享。
+- **轻量桌面体验**：基于 .NET 10 WPF 原生构建，适配 13 寸小屏与高分屏缩放，配备自定义无边框标题栏、Windows 系统托盘驻留与应用内自动检查更新。
+
+---
+
+## 安装与更新
+
+### 方式一：安装程序（推荐）
+前往 [GitHub Releases](https://github.com/li-songbai/StringNote/releases) 下载最新版 `StringNote-Setup-<version>.exe`：
+- 采用每用户（Per-User）安装模式，默认安装到 `%LocalAppData%\Programs\StringNote`，**无需管理员 UAC 弹窗**。
+- 自动创建开始菜单与桌面快捷方式，并关联 `.xianpu.json` 文件双击打开。
+- 支持应用内检查更新，自动下载新版安装包并静默覆盖重启。
+
+### 方式二：免安装便携版
+下载 `StringNote-Portable-win-x64-<version>.zip`，完整解压后直接运行 `Xianpu.Desktop.exe` 或 `Start-Xianpu.cmd`（自包含 .NET 10 运行时，无需额外安装运行环境）。
+
+---
+
+## 本地构建（Windows）
+
+需要安装 [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)（Windows x64）：
 
 ```powershell
+# 直接构建
 dotnet build app/Xianpu.Desktop/Xianpu.Desktop.csproj
-```
 
-使用打包脚本生成便携压缩包（若本机已安装 Inno Setup 6，将同时自动生成 `dist\StringNote-Setup-<Version>.exe`）：
-
-```powershell
-# 框架依赖发布
+# 框架依赖打包（生成便携 ZIP）
 pwsh -ExecutionPolicy Bypass -File .\Build.ps1
 
-# 自包含单文件发布并指定版本号
-pwsh -ExecutionPolicy Bypass -File .\Build.ps1 -SelfContained -Version 1.0.0
+# 自包含单文件打包（如本机已安装 Inno Setup 6，将同时生成安装包）
+pwsh -ExecutionPolicy Bypass -File .\Build.ps1 -SelfContained -Version 0.1.0-beta.8
 ```
 
-## 开发者发布流程
+也可直接双击根目录的 [启动弦谱.cmd](启动弦谱.cmd) 快速启动本地构建产物。
 
-仓库已配置 GitHub Actions 自动发布流水线（[`.github/workflows/release.yml`](.github/workflows/release.yml)）：
+---
 
-1. 推送语义化版本标签（`v*.*.*`）：
+## 自动发布流水线
+
+仓库已配置 GitHub Actions（[`.github/workflows/release.yml`](.github/workflows/release.yml)）：
+
+1. 推送语义化版本标签（`v*`）：
    ```bash
-   git tag v1.0.0
-   git push --tags
+   git tag v0.1.0-beta.8
+   git push origin main --tags
    ```
-2. GitHub Actions 将在 `windows-latest` 上自动执行：
-   - 使用 .NET 10 发布 `win-x64` 自包含单文件版本
-   - 生成便携压缩包 `dist/StringNote-Portable-win-x64-<version>.zip`
-   - 使用 Inno Setup 6 编译安装程序 `dist/StringNote-Setup-<version>.exe`
-   - 自动创建 GitHub Release 并上传安装包与便携压缩包（支持自动生成 Release Notes）
-3. 也可以在 GitHub 仓库的 **Actions → Release StringNote → Run workflow** 中手动触发构建。
+2. Actions 将在 `windows-latest` 上自动完成 .NET 10 `win-x64` 单文件发布、便携包压缩、Inno Setup 6 安装包编译，并自动创建 GitHub Release 与 Release Notes。
+3. 亦可在 GitHub 仓库的 **Actions → Release StringNote → Run workflow** 中手动触发。
+
+> 开发者与 AI 协作者请参阅 [AGENTS.md](AGENTS.md) 了解代码架构与开发约定。
