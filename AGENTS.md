@@ -20,8 +20,8 @@ StringNote/
 ├── app/Xianpu.Desktop/          # 核心 WPF 桌面应用（.NET 10）
 │   ├── Models.cs                # 数据模型：LibraryData、SongModel、LyricLine、ChordPlacement、TabSection/TabBar/TabNote 等
 │   ├── LibraryStore.cs          # 本地曲库持久化（%LocalAppData%\Xianpu\library.json，支持 XIANPU_DATA_DIR 覆盖）与 .xianpu.json 导入导出
-│   ├── MainWindow.xaml(.cs)     # 主窗口壳、自定义标题栏（WindowChrome）、曲库抽屉、工具栏与快捷键调度
-│   ├── ScoreSurface.cs          # 核心自绘谱面画布（流式合行/单行/双栏、和弦拖拽、键盘走位、叠行歌词、六线谱嵌入与 PNG 导出）
+│   ├── MainWindow.xaml(.cs)     # 主窗口壳、自定义标题栏、曲库抽屉、工具栏与和弦弹窗（拆分 MainWindow.UndoAndSettings.cs / MainWindow.Practice.cs / MainWindow.UpdatesAndChrome.cs）
+│   ├── ScoreSurface.cs          # 核心自绘谱面画布（流式合行/单行/双栏、和弦拖拽、键盘走位、叠行歌词、六线谱嵌入与 PNG 导出；拆分 ScoreSurface.Printing.cs 处理 A4 分页打印）
 │   ├── ChordCatalog.cs          # 各调常用和弦、开放/横按指法库与按调自定义和弦持久化
 │   ├── ChordDiagramView.cs      # 六弦和弦指法图渲染组件
 │   ├── ChordTranspose.cs        # 全谱半音升降调与按调名批量移调逻辑
