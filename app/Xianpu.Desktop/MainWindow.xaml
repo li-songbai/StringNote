@@ -255,6 +255,7 @@
                         <Button Content="导入谱子" Click="OpenProject_Click" Margin="0,2,5,2" ToolTip="导入好友分享的 .xianpu.json 可编辑曲谱文件（也可直接拖入窗口）" />
                         <Button Content="保存" Click="SaveToLibrary_Click" Margin="0,2,5,2" ToolTip="保存到本地曲库" />
                         <Button Content="导出谱子" Click="SaveProject_Click" Margin="0,2,5,2" ToolTip="导出为 .xianpu.json 可编辑曲谱文件，发给好友即可在同款软件中导入继续编辑" />
+                        <Button x:Name="SettingsButton" Content="设置与备份" Click="Settings_Click" Margin="0,2,5,2" ToolTip="自定义曲库数据目录、查看自动历史快照、导出或恢复整库备份" />
                         <Button x:Name="CheckUpdateButton" Content="检查更新" Click="CheckUpdate_Click" Margin="0,2,8,2" ToolTip="检查 GitHub 最新版本" />
                         <Button Content="导出图片 (PNG)" Style="{StaticResource PrimaryButton}" Padding="12,5" Margin="0,2,0,2" Click="ExportPng_Click" ToolTip="将当前曲谱导出为高清 PNG 图片" />
                     </WrapPanel>
@@ -276,6 +277,9 @@
 
                     <!-- Right: Chord & Layout Controls + Optional TAB Component -->
                     <WrapPanel VerticalAlignment="Center">
+                        <Button x:Name="UndoButton" Content="↩ 撤销" Padding="7,4" FontSize="12" Click="Undo_Click" IsEnabled="False" Margin="0,2,4,2" ToolTip="撤销上一步谱面编辑 (Ctrl+Z)" />
+                        <Button x:Name="RedoButton" Content="↪ 重做" Padding="7,4" FontSize="12" Click="Redo_Click" IsEnabled="False" Margin="0,2,8,2" ToolTip="重做已撤销的编辑 (Ctrl+Y)" />
+                        <Border Width="1" Height="18" Background="#CBD5E1" Margin="0,2,8,2" />
                         <Button x:Name="CopyLineChordsButton" Content="复制句和弦" Padding="7,4" FontSize="12" Click="CopyLineChords_Click" IsEnabled="False" Margin="0,2,5,2" ToolTip="复制当前选中句的全部和弦走向（Ctrl+C；Ctrl+D 直接复制到下一句）" />
                         <Button x:Name="PasteLineChordsButton" Content="粘贴句和弦" Padding="7,4" FontSize="12" Click="PasteLineChords_Click" IsEnabled="False" Margin="0,2,5,2" ToolTip="将已复制的和弦走向粘贴到当前选中句（Ctrl+V）" />
                         <Button x:Name="RemoveChordButton" Content="删除选中和弦" Padding="8,4" FontSize="12" Click="RemoveChord_Click" IsEnabled="False" Margin="0,2,5,2" ToolTip="删除当前选中的和弦 (Delete / Backspace)" />

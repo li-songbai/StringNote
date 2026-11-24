@@ -4,8 +4,24 @@ using System.Text.Json.Serialization;
 
 namespace Xianpu.Desktop;
 
+public sealed class AppSettings
+{
+    public string CustomDataDirectory { get; set; } = "";
+    public int MaxRollingBackups { get; set; } = 5;
+}
+
+public sealed record LibraryBackupInfo(
+    string FilePath,
+    string FileName,
+    DateTime CreatedAt,
+    long SizeBytes,
+    int? SongCount);
+
 public sealed class LibraryStore
 {
+    private const int DefaultMaxRollingBackups = 5;
+    private static readonly TimeSpan AutoBackupInterval = TimeSpan.FromMinutes(3);
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -13,42 +29,176 @@ public sealed class LibraryStore
         Converters = { new JsonStringEnumConverter() }
     };
 
-    public string LibraryPath { get; } = GetLibraryPath();
-
-    private static string GetLibraryPath()
+    private static readonly JsonSerializerOptions CompactJsonOptions = new()
     {
-        var overrideDirectory = Environment.GetEnvironmentVariable("XIANPU_DATA_DIR");
-        var directory = string.IsNullOrWhiteSpace(overrideDirectory)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Xianpu")
-            : overrideDirectory;
-        return Path.Combine(directory, "library.json");
+        WriteIndented = false,
+        PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
+
+    private AppSettings _settings;
+    private DateTime _lastAutoBackupUtc = DateTime.MinValue;
+
+    public LibraryStore()
+    {
+        _settings = LoadSettings();
     }
 
-    public LibraryData Load()
+    public static string DefaultDataDirectory =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Xianpu");
+
+    public static string SettingsPath =>
+        Path.Combine(DefaultDataDirectory, "settings.json");
+
+    public static bool IsDataDirOverriddenByEnv =>
+        !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("XIANPU_DATA_DIR"));
+
+    public bool IsUsingCustomDataDirectory =>
+        !IsDataDirOverriddenByEnv && !string.IsNullOrWhiteSpace(_settings.CustomDataDirectory);
+
+    public int MaxRollingBackups =>
+        Math.Clamp(_settings.MaxRollingBackups <= 0 ? DefaultMaxRollingBackups : _settings.MaxRollingBackups, 1, 20);
+
+    public string DataDirectory
+    {
+        get
+        {
+            var overrideDirectory = Environment.GetEnvironmentVariable("XIANPU_DATA_DIR");
+            if (!string.IsNullOrWhiteSpace(overrideDirectory))
+                return overrideDirectory.Trim();
+
+            if (!string.IsNullOrWhiteSpace(_settings.CustomDataDirectory))
+                return _settings.CustomDataDirectory.Trim();
+
+            return DefaultDataDirectory;
+        }
+    }
+
+    public string LibraryPath => Path.Combine(DataDirectory, "library.json");
+
+    public string BackupsDirectory => Path.Combine(DataDirectory, "backups");
+
+    public void SetCustomDataDirectory(string? directoryPath)
+    {
+        var normalized = string.IsNullOrWhiteSpace(directoryPath)
+            ? ""
+            : Path.GetFullPath(directoryPath.Trim());
+
+        if (!string.IsNullOrEmpty(normalized) &&
+            string.Equals(
+                normalized.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                Path.GetFullPath(DefaultDataDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = "";
+        }
+
+        _settings.CustomDataDirectory = normalized;
+        _lastAutoBackupUtc = DateTime.MinValue;
+        SaveSettings(_settings);
+    }
+
+    private static AppSettings LoadSettings()
     {
         try
         {
-            if (!File.Exists(LibraryPath))
+            if (!File.Exists(SettingsPath))
+                return new AppSettings();
+
+            var loaded = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(SettingsPath), JsonOptions) ?? new AppSettings();
+            loaded.CustomDataDirectory = (loaded.CustomDataDirectory ?? "").Trim();
+            loaded.MaxRollingBackups = Math.Clamp(loaded.MaxRollingBackups <= 0 ? DefaultMaxRollingBackups : loaded.MaxRollingBackups, 1, 20);
+            return loaded;
+        }
+        catch
+        {
+            return new AppSettings();
+        }
+    }
+
+    private static void SaveSettings(AppSettings settings)
+    {
+        Directory.CreateDirectory(DefaultDataDirectory);
+        var json = JsonSerializer.Serialize(settings, JsonOptions);
+        var tempPath = SettingsPath + ".tmp";
+        try
+        {
+            File.WriteAllText(tempPath, json);
+            File.Move(tempPath, SettingsPath, overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            File.WriteAllText(SettingsPath, json);
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+        }
+    }
+
+    public LibraryData Load() => LoadFromFile(LibraryPath, applyCustomChords: true);
+
+    public static LibraryData LoadLibraryBackup(string filePath)
+    {
+        if (!File.Exists(filePath))
+            throw new FileNotFoundException("找不到指定的曲库备份文件。", filePath);
+
+        return LoadFromFile(filePath, applyCustomChords: false);
+    }
+
+    private static LibraryData LoadFromFile(string filePath, bool applyCustomChords)
+    {
+        try
+        {
+            if (!File.Exists(filePath))
             {
                 var empty = new LibraryData();
-                ChordCatalog.LoadCustomData(empty.CustomChordsByKey, empty.CustomChordShapes);
+                if (applyCustomChords)
+                    ChordCatalog.LoadCustomData(empty.CustomChordsByKey, empty.CustomChordShapes);
                 return empty;
             }
-            var loaded = JsonSerializer.Deserialize<LibraryData>(File.ReadAllText(LibraryPath), JsonOptions) ?? new LibraryData();
+            var raw = File.ReadAllText(filePath);
+            var loaded = JsonSerializer.Deserialize<LibraryData>(raw, JsonOptions)
+                         ?? throw new InvalidDataException("曲库文件内容为空或格式无效。");
             loaded.Categories ??= [];
             loaded.Songs ??= [];
             loaded.CustomChordsByKey = new Dictionary<string, List<string>>(
                 loaded.CustomChordsByKey ?? new Dictionary<string, List<string>>(),
                 StringComparer.OrdinalIgnoreCase);
             loaded.CustomChordShapes ??= [];
-            ChordCatalog.LoadCustomData(loaded.CustomChordsByKey, loaded.CustomChordShapes);
+            if (applyCustomChords)
+                ChordCatalog.LoadCustomData(loaded.CustomChordsByKey, loaded.CustomChordShapes);
             foreach (var song in loaded.Songs)
                 NormalizeSong(song);
             return loaded;
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
-            throw new InvalidDataException($"曲谱库无法读取：{LibraryPath}", ex);
+            throw new InvalidDataException($"曲谱库无法读取：{filePath}", ex);
+        }
+    }
+
+    public static int? PeekLibrarySongCount(string libraryFilePath)
+    {
+        try
+        {
+            if (!File.Exists(libraryFilePath))
+                return null;
+
+            using var doc = JsonDocument.Parse(File.ReadAllText(libraryFilePath));
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return null;
+
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (string.Equals(prop.Name, "Songs", StringComparison.OrdinalIgnoreCase) &&
+                    prop.Value.ValueKind == JsonValueKind.Array)
+                {
+                    return prop.Value.GetArrayLength();
+                }
+            }
+            return 0;
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -56,6 +206,8 @@ public sealed class LibraryStore
     {
         var directory = Path.GetDirectoryName(LibraryPath)!;
         Directory.CreateDirectory(directory);
+        TryCreateRollingBackup();
+
         var json = JsonSerializer.Serialize(library, JsonOptions);
         var tempPath = LibraryPath + ".tmp";
         try
@@ -75,6 +227,127 @@ public sealed class LibraryStore
                 // Ignore cleanup failure on temp file
             }
         }
+    }
+
+    public string? CreateManualSnapshot(string tag = "manual")
+    {
+        try
+        {
+            if (!File.Exists(LibraryPath))
+                return null;
+
+            Directory.CreateDirectory(BackupsDirectory);
+            var safeTag = string.IsNullOrWhiteSpace(tag) ? "manual" : tag.Trim();
+            var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            var dest = Path.Combine(BackupsDirectory, $"library-{stamp}-{safeTag}.json");
+            File.Copy(LibraryPath, dest, overwrite: true);
+            PruneRollingBackups();
+            return dest;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public IReadOnlyList<LibraryBackupInfo> ListRollingBackups()
+    {
+        try
+        {
+            if (!Directory.Exists(BackupsDirectory))
+                return [];
+
+            return Directory.GetFiles(BackupsDirectory, "library-*.json")
+                .Select(path =>
+                {
+                    var info = new FileInfo(path);
+                    return new LibraryBackupInfo(
+                        path,
+                        info.Name,
+                        info.LastWriteTime,
+                        info.Length,
+                        PeekLibrarySongCount(path));
+                })
+                .OrderByDescending(b => b.CreatedAt)
+                .ToList();
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private void TryCreateRollingBackup()
+    {
+        try
+        {
+            if (!File.Exists(LibraryPath))
+                return;
+
+            var nowUtc = DateTime.UtcNow;
+            if (_lastAutoBackupUtc != DateTime.MinValue && (nowUtc - _lastAutoBackupUtc) < AutoBackupInterval)
+                return;
+
+            Directory.CreateDirectory(BackupsDirectory);
+            var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            var backupPath = Path.Combine(BackupsDirectory, $"library-{stamp}.json");
+            File.Copy(LibraryPath, backupPath, overwrite: true);
+            _lastAutoBackupUtc = nowUtc;
+            PruneRollingBackups();
+        }
+        catch
+        {
+            // Never let backup housekeeping block normal saving.
+        }
+    }
+
+    private void PruneRollingBackups()
+    {
+        try
+        {
+            if (!Directory.Exists(BackupsDirectory))
+                return;
+
+            var files = new DirectoryInfo(BackupsDirectory)
+                .GetFiles("library-*.json")
+                .OrderByDescending(f => f.LastWriteTimeUtc)
+                .ToList();
+
+            var keep = MaxRollingBackups;
+            for (var i = keep; i < files.Count; i++)
+            {
+                try { files[i].Delete(); } catch { }
+            }
+        }
+        catch
+        {
+            // Ignore cleanup errors
+        }
+    }
+
+    public static void ExportLibraryBackup(LibraryData library, string path) =>
+        File.WriteAllText(path, JsonSerializer.Serialize(library, JsonOptions));
+
+    public static string SerializeSongSnapshot(SongModel song)
+    {
+        var savedAt = song.UpdatedAt;
+        try
+        {
+            song.UpdatedAt = DateTime.MinValue;
+            return JsonSerializer.Serialize(song, CompactJsonOptions);
+        }
+        finally
+        {
+            song.UpdatedAt = savedAt;
+        }
+    }
+
+    public static SongModel? DeserializeSongSnapshot(string json)
+    {
+        var song = JsonSerializer.Deserialize<SongModel>(json, CompactJsonOptions);
+        if (song is not null)
+            NormalizeSong(song);
+        return song;
     }
 
     public static void SaveSongProject(SongModel song, string path) =>
