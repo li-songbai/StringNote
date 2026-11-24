@@ -141,6 +141,13 @@ public partial class MainWindow : Window
         ScoreSurface.PartArrangeRequested += OpenPartArrangeDialog;
         ScoreSurface.InsertPartAfterRequested += OpenInsertPartDialog;
         ScoreSurface.StatusMessageRequested += SetStatus;
+        ScoreSurface.EscapePressed += () =>
+        {
+            if (ContinuousPaintToggle?.IsChecked == true)
+                ContinuousPaintToggle.IsChecked = false;
+            if (LyricEditModeToggle?.IsChecked == true)
+                LyricEditModeToggle.IsChecked = false;
+        };
 
         Loaded += (_, _) =>
         {
@@ -392,14 +399,23 @@ public partial class MainWindow : Window
         _vm.Practice.ZoomPercentText = _manualZoom is null ? $"适应 {scale * 100:0}%" : $"{scale * 100:0}%";
     }
 
-    private void ZoomIn_Click(object sender, RoutedEventArgs e) => AdjustZoom(0.1);
+    private void ZoomIn_Click(object sender, RoutedEventArgs e)
+    {
+        AdjustZoom(0.1);
+        ScoreSurface?.Focus();
+    }
 
-    private void ZoomOut_Click(object sender, RoutedEventArgs e) => AdjustZoom(-0.1);
+    private void ZoomOut_Click(object sender, RoutedEventArgs e)
+    {
+        AdjustZoom(-0.1);
+        ScoreSurface?.Focus();
+    }
 
     private void ZoomFit_Click(object sender, RoutedEventArgs e)
     {
         _manualZoom = null;
         UpdateViewportScale();
+        ScoreSurface?.Focus();
     }
 
     private void AdjustZoom(double delta)

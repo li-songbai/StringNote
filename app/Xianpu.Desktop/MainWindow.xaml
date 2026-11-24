@@ -470,7 +470,8 @@
                             </Border.Effect>
                             <StackPanel>
                                 <!-- Notion-Style Inline Editable Sheet Header (Lives right on the paper!) -->
-                                <Border x:Name="InlineSheetHeader" Padding="36,22,36,14" BorderBrush="#E5EAF0" BorderThickness="0,0,0,1">
+                                <Border x:Name="InlineSheetHeader" Padding="36,22,36,14" BorderBrush="#E5EAF0" BorderThickness="0,0,0,1"
+                                        PreviewKeyDown="InlineSheetHeader_PreviewKeyDown">
                                     <StackPanel>
                                         <TextBox x:Name="TitleBox" Style="{StaticResource InlineTitleBoxStyle}"
                                                  Text="{Binding SelectedSong.Title, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -627,6 +628,7 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <TextBox x:Name="InlineChordBox" Grid.Column="0" FontSize="14" FontWeight="Bold" Padding="9,5"
+                                             InputMethod.IsInputMethodEnabled="False"
                                              PreviewKeyDown="InlineChordBox_PreviewKeyDown"
                                              ToolTip="直接输入任意左手和弦名称，例如 C、Am7、Fmaj7、G/B、Bm7-5、Cadd9" />
                                     <Button Grid.Column="1" Content="确定" Style="{StaticResource PrimaryButton}" Padding="11,5" Margin="6,0,0,0" Click="CommitInlineChord_Click" />

@@ -115,6 +115,7 @@ public partial class MainWindow
         RefreshQuickChordBar();
         ScoreSurface.Rebuild();
         SaveLibraryQuietly();
+        ScoreSurface.Focus();
         SetStatus($"全谱和弦已{(semitones > 0 ? "升" : "降")}半音，当前选调：{_selectedSong.SelectedKey}。");
     }
 
@@ -780,6 +781,34 @@ public partial class MainWindow
         _selectedSong.Capo = text == "不夹" ? "" : text;
     }
 
+    private void InlineSheetHeader_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.ImeProcessed)
+            return;
+
+        if (e.Key is not (Key.Return or Key.Escape))
+            return;
+
+        if (e.OriginalSource is DependencyObject src)
+        {
+            var current = src;
+            while (current is not null)
+            {
+                if (current is ComboBox { IsDropDownOpen: true })
+                    return;
+                current = GetVisualOrLogicalParent(current);
+            }
+        }
+
+        if (_selectedSong is not null)
+        {
+            _vm.CommitBpmText();
+            CommitFields();
+        }
+        ScoreSurface?.Focus();
+        e.Handled = true;
+    }
+
     private void KeyBox_LostFocus(object sender, RoutedEventArgs e)
     {
         if (_initializing || _selectedSong is null) return;
@@ -820,6 +849,7 @@ public partial class MainWindow
             ScoreSurface.Rebuild();
             UpdateViewportScale();
             SaveLibraryQuietly();
+            ScoreSurface.Focus();
         }
     }
 
@@ -830,5 +860,6 @@ public partial class MainWindow
         ScoreSurface.Rebuild();
         UpdateViewportScale();
         SaveLibraryQuietly();
+        ScoreSurface.Focus();
     }
 }

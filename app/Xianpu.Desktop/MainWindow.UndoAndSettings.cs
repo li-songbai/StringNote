@@ -11,6 +11,23 @@ public partial class MainWindow
     {
         base.OnPreviewKeyDown(e);
 
+        if (e.Key == Key.F2 && Keyboard.Modifiers == ModifierKeys.None && _selectedSong is not null && !_vm.IsPracticeMode)
+        {
+            if (!IsInlineLyricEditorOpen)
+            {
+                var focused = Keyboard.FocusedElement as DependencyObject;
+                var inChordPopover = ChordPopover.IsOpen && ReferenceEquals(focused, InlineChordBox);
+                if (focused is not TextBoxBase || inChordPopover)
+                {
+                    if (TriggerInlineLyricEditForCurrentSelection())
+                    {
+                        e.Handled = true;
+                        return;
+                    }
+                }
+            }
+        }
+
         if (e.Key == Key.F5 && Keyboard.Modifiers == ModifierKeys.None && Keyboard.FocusedElement is not TextBoxBase)
         {
             _vm.TogglePracticeModeCommand.Execute(null);
@@ -18,8 +35,33 @@ public partial class MainWindow
             return;
         }
 
+        if (e.Key == Key.Escape &&
+            Keyboard.Modifiers == ModifierKeys.None &&
+            !IsInlineLyricEditorOpen &&
+            !ChordPopover.IsOpen &&
+            Keyboard.FocusedElement is not TextBoxBase)
+        {
+            var clearedMode = false;
+            if (ContinuousPaintToggle?.IsChecked == true)
+            {
+                ContinuousPaintToggle.IsChecked = false;
+                clearedMode = true;
+            }
+            if (LyricEditModeToggle?.IsChecked == true)
+            {
+                LyricEditModeToggle.IsChecked = false;
+                clearedMode = true;
+            }
+            if (clearedMode)
+            {
+                ScoreSurface?.Focus();
+                e.Handled = true;
+                return;
+            }
+        }
+
         if (e.Key == Key.Space &&
-            _autoScrollEngaged &&
+            (_autoScrollEngaged || _vm.IsPracticeMode) &&
             Keyboard.Modifiers == ModifierKeys.None &&
             Keyboard.FocusedElement is not TextBoxBase &&
             !ChordPopover.IsOpen &&

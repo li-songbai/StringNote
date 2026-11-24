@@ -524,6 +524,21 @@ public partial class MainWindow
 
     private void InlineChordBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.F2 && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            if (TriggerInlineLyricEditForCurrentSelection())
+                e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.F5 && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            ChordPopover.IsOpen = false;
+            _vm.TogglePracticeModeCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.Enter)
         {
             CommitInlineChordAndClose();

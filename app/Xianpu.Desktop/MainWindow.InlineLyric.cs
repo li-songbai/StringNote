@@ -15,6 +15,59 @@ public partial class MainWindow
     private bool IsInlineLyricEditorOpen =>
         _activeInlineLyric is not null && InlineLyricOverlayCanvas?.Visibility == Visibility.Visible;
 
+    private bool TriggerInlineLyricEditForCurrentSelection()
+    {
+        if (_selectedSong is null || ScoreSurface is null)
+            return false;
+
+        if (_selectedSong.Lines.Count == 0)
+        {
+            _selectedSong.Lines.Add(new LyricLine { Text = "" });
+            ScoreSurface.Rebuild();
+            if (ScoreSurface.GetInlineLyricTarget(0, 0, 0) is { } firstTarget)
+            {
+                OpenInlineLyricEditor(firstTarget);
+                return true;
+            }
+            return false;
+        }
+
+        int? lineIdx = null;
+        int? charIdx = null;
+
+        if (ChordPopover.IsOpen && _popoverAnchor is { } popoverAnchor)
+        {
+            lineIdx = popoverAnchor.LineIndex;
+            charIdx = popoverAnchor.Position;
+        }
+        else if (ScoreSurface.ActiveLineIndex is { } activeIdx)
+        {
+            lineIdx = activeIdx;
+            charIdx = ScoreSurface.Caret?.LineIndex == activeIdx ? ScoreSurface.Caret.Position : null;
+        }
+        else
+        {
+            for (var i = 0; i < _selectedSong.Lines.Count; i++)
+            {
+                if (!_selectedSong.Lines[i].IsReferenceLine)
+                {
+                    lineIdx = i;
+                    charIdx = 0;
+                    break;
+                }
+            }
+        }
+
+        if (lineIdx is not { } idx || idx < 0 || idx >= _selectedSong.Lines.Count)
+            return false;
+
+        if (ScoreSurface.GetInlineLyricTarget(idx, 0, charIdx) is not { } target)
+            return false;
+
+        OpenInlineLyricEditor(target);
+        return true;
+    }
+
     private void LyricEditMode_Changed(object sender, RoutedEventArgs e)
     {
         if (LyricEditModeToggle is null || ScoreSurface is null) return;

@@ -138,6 +138,7 @@ public sealed partial class ScoreSurface : FrameworkElement
     public event Action? PartArrangeRequested;
     public event Action<int>? InsertPartAfterRequested;
     public event Action<string>? StatusMessageRequested;
+    public event Action? EscapePressed;
 
     public bool IsPointInteractive(Point point) =>
         FindChord(point) is not null ||
@@ -178,6 +179,7 @@ public sealed partial class ScoreSurface : FrameworkElement
         Focusable = true;
         AllowDrop = true;
         SnapsToDevicePixels = true;
+        InputMethod.SetIsInputMethodEnabled(this, false);
         Loaded += (_, _) =>
         {
             _pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
@@ -1823,7 +1825,9 @@ public sealed partial class ScoreSurface : FrameworkElement
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (e.Key == Key.F2 && Keyboard.Modifiers == ModifierKeys.None)
+        var key = e.Key == Key.ImeProcessed ? e.ImeProcessedKey : e.Key;
+
+        if (key == Key.F2 && Keyboard.Modifiers == ModifierKeys.None)
         {
             if (ActiveLineIndex is { } f2LineIdx &&
                 GetInlineLyricTarget(f2LineIdx, 0, _caret?.LineIndex == f2LineIdx ? _caret.Position : null) is { } f2Target)
@@ -1839,7 +1843,7 @@ public sealed partial class ScoreSurface : FrameworkElement
             return;
         }
 
-        if (e.Key is Key.Delete or Key.Back)
+        if (key is Key.Delete or Key.Back)
         {
             if (HasSelectedChord || (_caret is { } c && GetChordAt(c) is not null))
             {
@@ -1849,23 +1853,24 @@ public sealed partial class ScoreSurface : FrameworkElement
             return;
         }
 
-        if (e.Key == Key.Escape)
+        if (key == Key.Escape)
         {
             _selectedPlaced = null;
             SelectedShapeId = null;
             ActiveChordBrush = null;
             SelectionChanged?.Invoke();
+            EscapePressed?.Invoke();
             InvalidateVisual();
             e.Handled = true;
             return;
         }
 
-        if (e.Key == Key.Left && MoveCaret(-1, 0)) { e.Handled = true; return; }
-        if (e.Key == Key.Right && MoveCaret(1, 0)) { e.Handled = true; return; }
-        if (e.Key == Key.Up && MoveCaret(0, -1)) { e.Handled = true; return; }
-        if (e.Key == Key.Down && MoveCaret(0, 1)) { e.Handled = true; return; }
+        if (key == Key.Left && MoveCaret(-1, 0)) { e.Handled = true; return; }
+        if (key == Key.Right && MoveCaret(1, 0)) { e.Handled = true; return; }
+        if (key == Key.Up && MoveCaret(0, -1)) { e.Handled = true; return; }
+        if (key == Key.Down && MoveCaret(0, 1)) { e.Handled = true; return; }
 
-        if (e.Key is Key.Enter or Key.Space && _caret is { } caretAnchor)
+        if (key is Key.Enter or Key.Space && _caret is { } caretAnchor)
         {
             CharacterSlotClicked?.Invoke(caretAnchor, GetAnchorRect(caretAnchor), GetChordAt(caretAnchor));
             e.Handled = true;
@@ -1875,31 +1880,31 @@ public sealed partial class ScoreSurface : FrameworkElement
         if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control &&
             (Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.None)
         {
-            if (e.Key == Key.C && ActiveLineIndex is { } copyIdx && CopyLineChords(copyIdx))
+            if (key == Key.C && ActiveLineIndex is { } copyIdx && CopyLineChords(copyIdx))
             {
                 e.Handled = true;
                 return;
             }
-            if (e.Key == Key.V && ActiveLineIndex is { } pasteIdx && PasteLineChords(pasteIdx))
+            if (key == Key.V && ActiveLineIndex is { } pasteIdx && PasteLineChords(pasteIdx))
             {
                 e.Handled = true;
                 return;
             }
-            if (e.Key == Key.D && ActiveLineIndex is { } dupIdx && DuplicateLineChordsToNext(dupIdx))
+            if (key == Key.D && ActiveLineIndex is { } dupIdx && DuplicateLineChordsToNext(dupIdx))
             {
                 e.Handled = true;
                 return;
             }
         }
 
-        if (e.Key is >= Key.A and <= Key.G &&
+        if (key is >= Key.A and <= Key.G &&
             (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Alt)) == ModifierKeys.None)
         {
             if (_caret is null && Song is not null && Song.Lines.Count > 0)
                 _caret = new ChordAnchor(Math.Clamp(SelectedLineIndex ?? 0, 0, Song.Lines.Count - 1), 0);
             if (_caret is { } activeCaret)
             {
-                var letter = ((char)('A' + (e.Key - Key.A))).ToString();
+                var letter = ((char)('A' + (key - Key.A))).ToString();
                 QuickTypeStarted?.Invoke(activeCaret, GetAnchorRect(activeCaret), letter);
                 e.Handled = true;
             }

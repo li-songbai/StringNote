@@ -3,7 +3,7 @@
 **弦笺 (StringNote)** 是一款面向 Windows 的轻量原生吉他记谱桌面应用，专注于**弹唱谱与指弹六线谱的极简制作、排版与高清导出**。
 
 🌐 **项目主页**：[https://li-songbai.github.io/StringNote/](https://li-songbai.github.io/StringNote/)  
-📦 **最新版下载**：[GitHub Releases](https://github.com/li-songbai/StringNote/releases/latest)（当前正式版 v1.0.2）
+📦 **最新版下载**：[GitHub Releases](https://github.com/li-songbai/StringNote/releases/latest)（当前正式版 v1.0.3）
 
 ---
 
