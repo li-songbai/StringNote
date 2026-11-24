@@ -26,3 +26,6 @@ jobs:
 
       - name: Build Release
         run: dotnet build app/Xianpu.Desktop/Xianpu.Desktop.csproj -c Release --no-restore
+
+      - name: Run Unit Tests
+        run: dotnet test tests/Xianpu.Desktop.Tests/Xianpu.Desktop.Tests.csproj -c Release --verbosity normal

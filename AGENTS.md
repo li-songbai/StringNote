@@ -42,9 +42,10 @@ StringNote/
 │   ├── UpdateService.cs         # 基于 GitHub Releases API 的自动检查更新与静默覆盖安装
 │   └── Assets/StringNote.ico    # 应用图标（同时作为 EmbeddedResource 嵌入）
 ├── installer/StringNote.iss     # Inno Setup 6 安装包脚本（Per-User 免 UAC 安装、.xianpu.json 关联）
+├── tests/Xianpu.Desktop.Tests/  # 核心纯逻辑 xUnit 单元测试（移调、LRC、段落分析、AI 导入、曲库备份）
 ├── docs/                        # GitHub Pages 静态项目官网（https://li-songbai.github.io/StringNote/）
 ├── .github/workflows/
-│   ├── ci.yml                   # Push/PR 自动在 windows-latest 上验证 .NET 10 Release 构建
+│   ├── ci.yml                   # Push/PR 自动在 windows-latest 上验证 .NET 10 Release 构建与单元测试
 │   └── release.yml              # 推送 v* 标签或手动触发：Windows 构建 + 便携包 + Inno 安装包 + GitHub Release
 ├── Build.ps1                    # 本地 Windows 构建与打包脚本
 ├── LICENSE                      # 非商业用途许可协议（个人免费使用，禁止商用）
