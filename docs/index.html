@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>弦笺 · StringNote — Windows 原生吉他歌词与六线谱记谱工具</title>
+  <meta name="description" content="弦笺 (StringNote) 是一款面向 Windows 的轻量原生吉他记谱桌面软件，支持 AI 识谱导入、LRC 歌词与左手和弦可视化标记、六线谱 TAB 编辑、多段叠行排版与高清 PNG 导出。" />
+  <meta property="og:title" content="弦笺 · StringNote — 极简吉他弹唱与指弹记谱工具" />
+  <meta property="og:description" content="导入 LRC 歌词或使用 AI 识谱，快速标记左手和弦与六线谱，导出紧凑高清曲谱图片。" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://li-songbai.github.io/StringNote/" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="#top" aria-label="弦笺 StringNote 首页">
+        <span class="brand-mark" aria-hidden="true">笺</span>
+        <span class="brand-text">
+          <span class="brand-cn">弦笺</span>
+          <span class="brand-en">StringNote</span>
+        </span>
+      </a>
+
+      <nav class="nav-links" aria-label="主导航">
+        <a href="#workflow">工作流</a>
+        <a href="#features">核心特性</a>
+        <a href="#shortcuts">键盘效率</a>
+        <a href="#download">下载安装</a>
+      </nav>
+
+      <div class="header-actions">
+        <a class="btn btn-ghost" href="https://github.com/li-songbai/StringNote" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a class="btn btn-primary" href="#download">下载 Windows 版</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- ─── Hero ──────────────────────────────────────────────── -->
+    <section class="hero">
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <p class="hero-eyebrow">Windows 原生吉他记谱工具 · 开源免费</p>
+          <h1 class="hero-title">把歌词、和弦与六线谱，写进一张干净的琴谱里</h1>
+          <p class="hero-subtitle">
+            <strong>弦笺 (StringNote)</strong> 专为吉他弹唱与指弹爱好者打造。支持 AI 识谱与 LRC 歌词一键导入、纯键盘高速走位填和弦、自定义指法图、六线谱技巧编辑与多段叠行排版，所见即所得导出高清 PNG 曲谱。
+          </p>
+
+          <div class="hero-cta">
+            <a id="hero-download-btn" class="btn btn-primary btn-lg" href="https://github.com/li-songbai/StringNote/releases" target="_blank" rel="noopener noreferrer">
+              下载安装包（<span data-latest-version>v0.1.0-beta.8</span>）
+            </a>
+            <a class="btn btn-secondary btn-lg" href="https://github.com/li-songbai/StringNote" target="_blank" rel="noopener noreferrer">
+              查看源码仓库
+            </a>
+          </div>
+
+          <div class="hero-meta">
+            <span class="hero-meta-item">Windows 10 / 11 (x64)</span>
+            <span class="meta-sep">·</span>
+            <span class="hero-meta-item">免 UAC 弹窗安装</span>
+            <span class="meta-sep">·</span>
+            <span class="hero-meta-item">本地离线曲库</span>
+            <span class="meta-sep">·</span>
+            <span class="hero-meta-item">.NET 10 WPF 原生构建</span>
+          </div>
+        </div>
+
+        <!-- ─── Interactive Score Sheet Preview ────────────────── -->
+        <div class="sheet-stage" aria-label="交互式谱面预览">
+          <div class="sheet-toolbar">
+            <div class="sheet-controls-group" role="group" aria-label="一键移调体验">
+              <span class="control-label">移调</span>
+              <button type="button" class="chip-btn active" data-key="C">C</button>
+              <button type="button" class="chip-btn" data-key="G">G</button>
+              <button type="button" class="chip-btn" data-key="F">F</button>
+              <button type="button" class="chip-btn" data-key="D">D</button>
+            </div>
+            <div class="sheet-controls-group">
+              <button type="button" id="toggle-chord-mode" class="chip-btn">指法图：关</button>
+              <button type="button" id="toggle-stacked-lyrics" class="chip-btn active">叠行歌词：开</button>
+            </div>
+          </div>
+
+          <div class="sheet-body">
+            <div class="sheet-song-head">
+              <h2 class="sheet-song-title">秋日木吉他（谱面示例）</h2>
+              <div class="sheet-song-tags">
+                <span>原调 C</span>
+                <span id="sheet-key-tag">选调 C 调</span>
+                <span id="sheet-capo-tag">变调夹 不夹</span>
+              </div>
+            </div>
+
+            <div class="sheet-part-label">前奏 · 六线谱 TAB (4/4)</div>
+            <div class="sheet-tab-preview" aria-label="六线谱示例">
+              <svg class="sheet-tab-svg" viewBox="0 0 520 82" xmlns="http://www.w3.org/2000/svg">
+                <!-- TAB label -->
+                <text x="10" y="25" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#2F6B48">T</text>
+                <text x="10" y="45" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#2F6B48">A</text>
+                <text x="10" y="65" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#2F6B48">B</text>
+                <!-- 6 strings -->
+                <g stroke="#C8D3CD" stroke-width="1">
+                  <line x1="28" y1="14" x2="510" y2="14" />
+                  <line x1="28" y1="25" x2="510" y2="25" />
+                  <line x1="28" y1="36" x2="510" y2="36" />
+                  <line x1="28" y1="47" x2="510" y2="47" />
+                  <line x1="28" y1="58" x2="510" y2="58" />
+                  <line x1="28" y1="69" x2="510" y2="69" />
+                </g>
+                <!-- Barlines -->
+                <g stroke="#66776E" stroke-width="1.4">
+                  <line x1="28" y1="14" x2="28" y2="69" />
+                  <line x1="268" y1="14" x2="268" y2="69" />
+                  <line x1="506" y1="14" x2="506" y2="69" />
+                  <line x1="510" y1="14" x2="510" y2="69" stroke-width="2.4" />
+                </g>
+                <!-- Bar 1 arpeggio (C) -->
+                <g font-family="JetBrains Mono, monospace" font-size="11.5" font-weight="700" fill="#1B2620" text-anchor="middle">
+                  <rect x="52" y="51" width="14" height="13" fill="#FCFDFC" /><text x="59" y="62">3</text>
+                  <rect x="86" y="29" width="14" height="13" fill="#FCFDFC" /><text x="93" y="40">0</text>
+                  <rect x="120" y="18" width="14" height="13" fill="#FCFDFC" /><text x="127" y="29">1</text>
+                  <rect x="154" y="29" width="14" height="13" fill="#FCFDFC" /><text x="161" y="40">0</text>
+                  <rect x="188" y="7" width="14" height="13" fill="#FCFDFC" /><text x="195" y="18">0</text>
+                  <rect x="222" y="18" width="14" height="13" fill="#FCFDFC" /><text x="229" y="29">1</text>
+                </g>
+                <!-- Bar 2 arpeggio with Hammer-on (Am) -->
+                <g font-family="JetBrains Mono, monospace" font-size="11.5" font-weight="700" fill="#1B2620" text-anchor="middle">
+                  <rect x="292" y="51" width="14" height="13" fill="#FCFDFC" /><text x="299" y="62">0</text>
+                  <rect x="326" y="29" width="14" height="13" fill="#FCFDFC" /><text x="333" y="40">2</text>
+                  <rect x="360" y="18" width="14" height="13" fill="#FCFDFC" /><text x="367" y="29">0</text>
+                  <rect x="394" y="18" width="14" height="13" fill="#FCFDFC" /><text x="401" y="29">1</text>
+                  <path d="M 370 16 Q 384 6 398 16" fill="none" stroke="#2F6B48" stroke-width="1.3" />
+                  <text x="384" y="10" font-size="8.5" fill="#2F6B48">H</text>
+                  <rect x="430" y="29" width="14" height="13" fill="#FCFDFC" /><text x="437" y="40">2</text>
+                  <rect x="466" y="7" width="14" height="13" fill="#FCFDFC" /><text x="473" y="18">0</text>
+                </g>
+              </svg>
+            </div>
+
+            <div class="sheet-part-label">主歌 1 / 2 · 叠行排版</div>
+            <div id="interactive-lyrics" class="lyric-block"></div>
+
+            <div class="sheet-hint">
+              <span>点击上方按钮实时体验移调、指法图与叠行效果</span>
+              <span>PNG 导出所见即所得</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Workflow ──────────────────────────────────────────── -->
+    <section id="workflow" class="section section-alt">
+      <div class="container">
+        <div class="section-header">
+          <p class="section-kicker">Workflow</p>
+          <h2 class="section-title">三步完成一张可直接练琴的高清曲谱</h2>
+          <p class="section-desc">抛弃繁琐的五线谱排版与 Word 对齐噩梦，专注在进唱字位与和弦本身。</p>
+        </div>
+
+        <div class="workflow-grid">
+          <article class="step-card">
+            <div class="step-num">01 / IMPORT</div>
+            <h3>导入歌词或 AI 识谱</h3>
+            <p>拖入本地 `.lrc` / `.txt` 歌词文件，自动识别编码并过滤制作人员行；或使用内置 AI 识谱 Prompt 将图片曲谱一键转成结构化曲谱导入。</p>
+          </article>
+          <article class="step-card">
+            <div class="step-num">02 / ARRANGE</div>
+            <h3>标和弦、配六线谱、排段落</h3>
+            <p>点字或纯键盘快速放置左手和弦，按需插入前奏/间奏六线谱与演奏技巧，使用叠行排版把主歌 1、主歌 2 紧凑收进同一页。</p>
+          </article>
+          <article class="step-card">
+            <div class="step-num">03 / EXPORT</div>
+            <h3>高清导出与曲库归档</h3>
+            <p>一键导出无选中框的高清 PNG 长图方便平板/手机看谱，或另存 `.xianpu.json` 分享给琴友，同时自动归档到本地曲库。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Features ──────────────────────────────────────────── -->
+    <section id="features" class="section">
+      <div class="container">
+        <div class="section-header">
+          <p class="section-kicker">Features</p>
+          <h2 class="section-title">为吉他弹唱与指弹场景打磨的每一处细节</h2>
+          <p class="section-desc">持续迭代至 <span data-latest-version>v0.1.0-beta.8</span>，涵盖从入门弹唱到进阶六线谱编排的完整能力。</p>
+        </div>
+
+        <div class="feature-grid">
+          <article class="feature-card">
+            <span class="feature-tag">AI 辅助</span>
+            <h3>AI 识谱导入（弹唱谱 &amp; 指弹谱）</h3>
+            <p>无需配置 API Key，内置两套经过调优的专属 Prompt，配合任意多模态大模型即可把网图、纸质谱照片快速数字化。</p>
+            <ul class="feature-list">
+              <li>支持「弹唱谱（歌词 + 和弦）」与「指弹谱（纯六线谱 / 多页）」双模板</li>
+              <li>自动从整段 AI 回复中提取 JSON，支持新建或追加到当前曲谱</li>
+              <li>同样兼容直接粘贴 `.xianpu.json` 进行跨设备分享</li>
+            </ul>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-tag">和弦记谱</span>
+            <h3>左手和弦标记与按调自定义指法</h3>
+            <p>在进唱字位上方或字前精准落点和弦，支持拖拽调整、全谱移调与自定义指法图。</p>
+            <ul class="feature-list">
+              <li>内置各调常用和弦快捷条，支持 `Fmaj7`、`G/B`、`Cadd9` 等任意记号</li>
+              <li>按调号自定义左手和弦，可视化编辑六弦品位与指法编号</li>
+              <li>支持 `♭-1` / `♯+1` 半音移调与按目标调名批量转调</li>
+            </ul>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-tag">六线谱 TAB</span>
+            <h3>独立六线谱编辑器与丰富演奏技巧</h3>
+            <p>在歌词前奏、间奏、尾奏或任意段落后嵌入可选六线谱区块，与弹唱歌词自然衔接。</p>
+            <ul class="feature-list">
+              <li>支持自定义拍号、小节列数、节奏符干、附点、休止符与反复记号</li>
+              <li>涵盖下扫/上扫/切音/琶音、P.M. 制音、击弦 H、勾弦 P、滑音 S、推弦、泛音与揉弦</li>
+              <li>支持联动编辑（Ripple Editing），大幅减少调小节时的重复劳动</li>
+            </ul>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-tag">智能排版</span>
+            <h3>段落编排、多段叠行与单页紧凑布局</h3>
+            <p>针对常见流行与民谣结构优化版面密度，让一首歌尽量用更少的翻页清晰呈现。</p>
+            <ul class="feature-list">
+              <li>自动分析前奏/主歌/副歌/桥段结构，支持段落排序与引用段插入</li>
+              <li>多段主歌歌词叠行显示，配备专用字位对齐编辑器</li>
+              <li>合行紧凑 / 逐句单行 / 自动双栏自由切换，适配 13 寸小屏与高分屏</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Shortcuts & AI Workflow ────────────────────────────── -->
+    <section id="shortcuts" class="section section-alt">
+      <div class="container">
+        <div class="section-header">
+          <p class="section-kicker">Efficiency</p>
+          <h2 class="section-title">纯键盘快速填谱，手不离键</h2>
+          <p class="section-desc">熟悉几个直观快捷键，几分钟就能整理完一首完整弹唱谱。</p>
+        </div>
+
+        <div class="shortcuts-wrap">
+          <table class="shortcut-table">
+            <thead>
+              <tr>
+                <th>操作方式</th>
+                <th>说明</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd></td>
+                <td>在谱面进唱字位间自由移动焦点</td>
+              </tr>
+              <tr>
+                <td><kbd>A</kbd> – <kbd>G</kbd></td>
+                <td>直接呼出和弦输入框并带入首字母，按 <kbd>Enter</kbd> 确认</td>
+              </tr>
+              <tr>
+                <td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td>
+                <td>填完当前和弦后连续跳至下一 / 上一字位</td>
+              </tr>
+              <tr>
+                <td>点击常用和弦 + 连点填谱</td>
+                <td>开启连点模式后，在歌词不同位置连续点击批量放置</td>
+              </tr>
+              <tr>
+                <td>拖拽和弦 / 拖入文件</td>
+                <td>鼠标直接拖动已放置和弦换位；拖入 `.lrc` / `.txt` / `.xianpu.json` 直接打开</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <aside class="ai-tip-box">
+            <h3>三步用好 AI 识谱导入</h3>
+            <p>手里只有截图或扫描谱？不用逐字重抄：</p>
+            <ol class="ai-steps">
+              <li>在应用顶部点击「AI 识谱」，选择<strong>弹唱谱</strong>或<strong>指弹谱</strong>模式并点击「复制 Prompt」。</li>
+              <li>将 Prompt 连同曲谱图片发给任意支持识图的 AI（如 Gemini、ChatGPT、Claude 等）。</li>
+              <li>复制 AI 返回的完整内容粘贴回弹窗，自动提取 JSON 并即时渲染成可编辑曲谱。</li>
+            </ol>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Download ──────────────────────────────────────────── -->
+    <section id="download" class="section">
+      <div class="container">
+        <div class="section-header">
+          <p class="section-kicker">Download</p>
+          <h2 class="section-title">获取弦笺 StringNote</h2>
+          <p class="section-desc">完全开源免费，所有构建产物均由 GitHub Actions 自动编译并发布在 GitHub Releases。</p>
+        </div>
+
+        <div class="download-grid">
+          <article class="download-card recommended">
+            <div>
+              <span class="download-badge">推荐 · 自动更新</span>
+              <h3>Windows 安装程序（.exe）</h3>
+              <p>适合日常主力使用，一键完成安装、桌面快捷方式创建与文件关联。</p>
+              <ul class="download-notes">
+                <li>每用户（Per-User）安装至 <code>%LocalAppData%\Programs\StringNote</code>，无需管理员权限与 UAC 弹窗</li>
+                <li>自动关联 <code>.xianpu.json</code> 曲谱文件，双击即可打开</li>
+                <li>内置 GitHub Releases 更新检测，支持应用内静默覆盖升级</li>
+              </ul>
+            </div>
+            <div class="download-actions">
+              <a id="download-setup-btn" class="btn btn-primary btn-lg" href="https://github.com/li-songbai/StringNote/releases" target="_blank" rel="noopener noreferrer">
+                下载安装程序（<span data-latest-version>v0.1.0-beta.8</span>）
+              </a>
+            </div>
+          </article>
+
+          <article class="download-card">
+            <div>
+              <span class="download-badge">免安装 · 绿色版</span>
+              <h3>便携压缩包（.zip）</h3>
+              <p>无需安装流程，解压到任意目录或 U 盘即可直接运行。</p>
+              <ul class="download-notes">
+                <li>自包含 .NET 10 运行时（win-x64），无需单独安装桌面运行时</li>
+                <li>完整解压后运行 <code>Xianpu.Desktop.exe</code> 或 <code>Start-Xianpu.cmd</code></li>
+                <li>支持通过环境变量 <code>XIANPU_DATA_DIR</code> 自定义本地曲库存放目录</li>
+              </ul>
+            </div>
+            <div class="download-actions">
+              <a id="download-portable-btn" class="btn btn-secondary btn-lg" href="https://github.com/li-songbai/StringNote/releases" target="_blank" rel="noopener noreferrer">
+                下载便携版 ZIP
+              </a>
+              <a class="btn btn-ghost" href="https://github.com/li-songbai/StringNote/releases" target="_blank" rel="noopener noreferrer">
+                全部历史版本 →
+              </a>
+            </div>
+          </article>
+        </div>
+
+        <div class="release-status">
+          <span id="release-meta-text">当前最新版本：v0.1.0-beta.8（支持应用内一键检查更新）</span>
+          <a href="https://github.com/li-songbai/StringNote/issues" target="_blank" rel="noopener noreferrer">遇到问题或有功能建议？前往 Issues 反馈 →</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div>弦笺 · StringNote — 轻量原生 Windows 吉他记谱工具</div>
+      <div class="footer-links">
+        <a href="https://github.com/li-songbai/StringNote" target="_blank" rel="noopener noreferrer">GitHub 仓库</a>
+        <a href="https://github.com/li-songbai/StringNote/releases" target="_blank" rel="noopener noreferrer">版本发布</a>
+        <a href="https://github.com/li-songbai/StringNote/issues" target="_blank" rel="noopener noreferrer">问题反馈</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="./app.js"></script>
+</body>
+</html>
