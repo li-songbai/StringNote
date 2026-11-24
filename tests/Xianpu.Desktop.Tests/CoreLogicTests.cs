@@ -205,4 +205,33 @@ public sealed class CoreLogicTests
             try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void LibraryStore_QuarantineCorruptedLibrary_PreservesCorruptedFile()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "StringNoteCorruptTest_" + Guid.NewGuid().ToString("N"));
+        var prevEnv = Environment.GetEnvironmentVariable("XIANPU_DATA_DIR");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            Environment.SetEnvironmentVariable("XIANPU_DATA_DIR", tempDir);
+            var store = new LibraryStore();
+
+            const string brokenJson = "{ invalid json from sync conflict";
+            File.WriteAllText(store.LibraryPath, brokenJson);
+
+            Assert.Throws<InvalidDataException>(() => store.Load());
+
+            var quarantinedPath = store.QuarantineCorruptedLibrary();
+            Assert.NotNull(quarantinedPath);
+            Assert.True(File.Exists(quarantinedPath!));
+            Assert.Equal(brokenJson, File.ReadAllText(quarantinedPath!));
+            Assert.False(File.Exists(store.LibraryPath));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("XIANPU_DATA_DIR", prevEnv);
+            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
 }
