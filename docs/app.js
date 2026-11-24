@@ -202,7 +202,7 @@
     }
   }
 
-  // ─── Fetch Latest GitHub Release (supports pre-releases) ───────────────────
+  // ─── Fetch Latest GitHub Release (stable releases only) ───────────────────
   async function loadLatestRelease() {
     const versionEls = document.querySelectorAll('[data-latest-version]');
     const setupLink = document.getElementById('download-setup-btn');
@@ -211,15 +211,14 @@
     const releaseMeta = document.getElementById('release-meta-text');
 
     try {
-      const resp = await fetch('https://api.github.com/repos/li-songbai/StringNote/releases?per_page=1', {
+      const resp = await fetch('https://api.github.com/repos/li-songbai/StringNote/releases/latest', {
         headers: { Accept: 'application/vnd.github+json' }
       });
       if (!resp.ok) return;
-      const releases = await resp.json();
-      if (!Array.isArray(releases) || releases.length === 0) return;
+      const latest = await resp.json();
+      if (!latest || !latest.tag_name) return;
 
-      const latest = releases[0];
-      const tag = latest.tag_name || 'v0.1.0-beta.8';
+      const tag = latest.tag_name;
       const published = latest.published_at ? latest.published_at.slice(0, 10) : '';
       const assets = Array.isArray(latest.assets) ? latest.assets : [];
 
@@ -241,7 +240,7 @@
       }
       if (releaseMeta) {
         const datePart = published ? ` · 发布于 ${published}` : '';
-        releaseMeta.textContent = `当前最新版本：${tag}${datePart}（支持应用内一键检查更新）`;
+        releaseMeta.textContent = `当前正式版本：${tag}${datePart}（支持应用内一键检查更新）`;
       }
     } catch {
       // Fallback to static release links already present in HTML
