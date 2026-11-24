@@ -249,13 +249,148 @@
             <Setter Property="Padding" Value="2,1" />
         </Style>
 
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Padding" Value="8,5" />
+            <Setter Property="Margin" Value="0,1" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="#1E293B" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="ItemBg" Background="Transparent" CornerRadius="5" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemBg" Property="Background" Value="#F1F5F9" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBg" Property="Background" Value="#EAF3ED" />
+                                <Setter Property="Foreground" Value="#245538" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style TargetType="ComboBox">
-            <Setter Property="Padding" Value="6,3" />
+            <Setter Property="Padding" Value="8,3" />
             <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="Foreground" Value="#1E293B" />
             <Setter Property="BorderBrush" Value="#D5DCE4" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid x:Name="MainGrid">
+                            <Border x:Name="OuterBorder"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="6">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="20" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Full-surface clickable ToggleButton for non-editable ComboBox -->
+                                    <ToggleButton x:Name="DropDownToggle" Grid.ColumnSpan="2"
+                                                  Focusable="False"
+                                                  ClickMode="Press"
+                                                  IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                                  Cursor="Hand">
+                                        <ToggleButton.Template>
+                                            <ControlTemplate TargetType="ToggleButton">
+                                                <Border Background="Transparent">
+                                                    <Path Data="M 0,0 L 3.5,3.8 L 7,0"
+                                                          Stroke="#64748B" StrokeThickness="1.4"
+                                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                                          HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                          Margin="0,0,7,0" />
+                                                </Border>
+                                            </ControlTemplate>
+                                        </ToggleButton.Template>
+                                    </ToggleButton>
+
+                                    <!-- Display Content for non-editable ComboBox -->
+                                    <ContentPresenter x:Name="ContentSite" Grid.Column="0"
+                                                      IsHitTestVisible="False"
+                                                      Content="{TemplateBinding SelectionBoxItem}"
+                                                      ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                      ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                                      Margin="{TemplateBinding Padding}"
+                                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                      HorizontalAlignment="Left" />
+
+                                    <!-- Editable TextBox (only visible when IsEditable=True) -->
+                                    <TextBox x:Name="PART_EditableTextBox" Grid.Column="0"
+                                             Visibility="Collapsed"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             Foreground="{TemplateBinding Foreground}"
+                                             FontSize="{TemplateBinding FontSize}"
+                                             FontWeight="{TemplateBinding FontWeight}"
+                                             Padding="{TemplateBinding Padding}"
+                                             VerticalContentAlignment="Center"
+                                             IsReadOnly="{TemplateBinding IsReadOnly}" />
+                                </Grid>
+                            </Border>
+
+                            <Popup x:Name="PART_Popup"
+                                   AllowsTransparency="True"
+                                   Placement="Bottom"
+                                   PlacementTarget="{Binding ElementName=OuterBorder}"
+                                   VerticalOffset="4"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   PopupAnimation="Fade"
+                                   Focusable="False">
+                                <Border Background="#FFFFFF"
+                                        BorderBrush="#CBD5E1"
+                                        BorderThickness="1"
+                                        CornerRadius="8"
+                                        Padding="4"
+                                        Margin="0,0,6,8"
+                                        MinWidth="{Binding ActualWidth, ElementName=OuterBorder}"
+                                        MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="14" ShadowDepth="3" Opacity="0.12" Color="#0F172A" />
+                                    </Border.Effect>
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEditable" Value="True">
+                                <Setter TargetName="ContentSite" Property="Visibility" Value="Collapsed" />
+                                <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible" />
+                                <Setter TargetName="DropDownToggle" Property="Grid.Column" Value="1" />
+                                <Setter TargetName="DropDownToggle" Property="Grid.ColumnSpan" Value="1" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="OuterBorder" Property="BorderBrush" Value="#94BFA4" />
+                            </Trigger>
+                            <Trigger Property="IsDropDownOpen" Value="True">
+                                <Setter TargetName="OuterBorder" Property="BorderBrush" Value="#2F6B48" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="OuterBorder" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
@@ -527,34 +662,34 @@
                     <!-- Floating Contextual Chord & Quick-Tool Bar (Auto-hidden in Practice Mode) -->
                     <Border x:Name="FloatingChordBar" Grid.Row="0" Margin="16,10,16,2" Padding="10,6"
                             Background="#FFFFFF" BorderBrush="#DCE3EB" BorderThickness="1" CornerRadius="10"
-                            HorizontalAlignment="Center">
+                            HorizontalAlignment="Stretch" MaxWidth="1120">
                         <Border.Effect>
                             <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.06" Color="#0F172A" />
                         </Border.Effect>
                         <WrapPanel VerticalAlignment="Center">
-                            <ToggleButton x:Name="ContinuousPaintToggle" Content="✎ 连点" Padding="8,3" Margin="0,1,6,1" FontSize="11.5"
+                            <ToggleButton x:Name="ContinuousPaintToggle" Content="✎ 连点" Padding="8,3" Margin="0,2,6,2" FontSize="11.5"
                                           Checked="ContinuousPaint_Changed" Unchecked="ContinuousPaint_Changed"
                                           ToolTip="开启后：点选一个常用和弦，再连续点击歌词字位批量放置" />
-                            <TextBlock x:Name="PaletteKeyLabel" Text="常用：" FontSize="11.5" FontWeight="SemiBold" Foreground="#64748B" VerticalAlignment="Center" Margin="0,1,4,1" />
+                            <TextBlock x:Name="PaletteKeyLabel" Text="常用：" FontSize="11.5" FontWeight="SemiBold" Foreground="#64748B" VerticalAlignment="Center" Margin="0,2,4,2" />
                             <WrapPanel x:Name="QuickChordPanel" VerticalAlignment="Center" />
 
-                            <Border Width="1" Height="16" Background="#E2E8F0" Margin="6,1,6,1" />
+                            <Border Width="1" Height="16" Background="#E2E8F0" Margin="6,2,6,2" />
 
-                            <ComboBox x:Name="ColumnModeBox" Width="82" SelectedValuePath="Tag" Margin="0,1,5,1" SelectionChanged="ColumnMode_Changed" ToolTip="排版模式：合行紧凑 / 逐句单行 / 双栏对照">
+                            <ComboBox x:Name="ColumnModeBox" Width="88" Height="26" Padding="8,2" SelectedValuePath="Tag" Margin="0,2,5,2" SelectionChanged="ColumnMode_Changed" ToolTip="排版模式：合行紧凑 / 逐句单行 / 双栏对照">
                                 <ComboBoxItem Content="合行紧凑" Tag="0" />
                                 <ComboBoxItem Content="逐句单行" Tag="1" />
                                 <ComboBoxItem Content="双栏对照" Tag="2" />
                             </ComboBox>
 
-                            <ComboBox x:Name="ChordDisplayBox" Width="76" SelectedValuePath="Tag" Margin="0,1,5,1" SelectionChanged="ChordDisplay_Changed" ToolTip="切换显示和弦名称、六弦指法图或级数">
+                            <ComboBox x:Name="ChordDisplayBox" Width="78" Height="26" Padding="8,2" SelectedValuePath="Tag" Margin="0,2,5,2" SelectionChanged="ChordDisplay_Changed" ToolTip="切换显示和弦名称、六弦指法图或级数">
                                 <ComboBoxItem Content="和弦名" Tag="name" />
                                 <ComboBoxItem Content="指法图" Tag="diagram" />
                                 <ComboBoxItem Content="级数" Tag="degree" />
                             </ComboBox>
 
-                            <Button x:Name="ChordOpsMenuButton" Content="和弦 ▾" Padding="8,3" FontSize="11.5" Margin="0,1,5,1" Click="ChordOpsMenu_Click" ToolTip="复制/粘贴句和弦、删除选中和弦、清空全部和弦" />
+                            <Button x:Name="ChordOpsMenuButton" Content="和弦 ▾" Padding="8,3" FontSize="11.5" Margin="0,2,5,2" Click="ChordOpsMenu_Click" ToolTip="复制/粘贴句和弦、删除选中和弦、清空全部和弦" />
                             <Button x:Name="TabSectionButton" Content="+ 六线谱" Style="{StaticResource AccentOutlineButton}"
-                                    Padding="8,3" FontSize="11.5" Margin="0,1,0,1" Click="TabSectionMenu_Click"
+                                    Padding="8,3" FontSize="11.5" Margin="0,2,0,2" Click="TabSectionMenu_Click"
                                     ToolTip="添加或管理前奏 / 间奏 / 尾奏六线谱（可选扩展组件）" />
 
                             <!-- Hidden compatibility buttons kept for existing UpdateActionStates references -->
