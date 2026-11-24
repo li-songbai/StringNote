@@ -169,7 +169,7 @@
           <article class="step-card">
             <div class="step-num">01 / IMPORT</div>
             <h3>导入歌词或 AI 识谱</h3>
-            <p>拖入本地 `.lrc` / `.txt` 歌词文件，自动识别编码并过滤制作人员行；或使用内置 AI 识谱 Prompt 将图片曲谱一键转成结构化曲谱导入。</p>
+            <p>拖入本地 <code>.lrc</code> / <code>.txt</code> 歌词文件，自动识别编码、读取歌名与原唱并过滤制作人员行；或使用内置 AI 识谱 Prompt 将图片曲谱一键转成结构化曲谱导入。</p>
           </article>
           <article class="step-card">
             <div class="step-num">02 / ARRANGE</div>
@@ -179,7 +179,7 @@
           <article class="step-card">
             <div class="step-num">03 / EXPORT</div>
             <h3>高清导出与曲库归档</h3>
-            <p>一键导出无选中框的高清 PNG 长图方便平板/手机看谱，或另存 `.xianpu.json` 分享给琴友，同时自动归档到本地曲库。</p>
+            <p>一键导出高清 PNG 长图或 A4 分页打印 / PDF，或另存 <code>.xianpu.json</code> 分享给琴友，同时自动归档到本地曲库。</p>
           </article>
         </div>
       </div>
@@ -202,7 +202,7 @@
             <ul class="feature-list">
               <li>支持「弹唱谱（歌词 + 和弦）」与「指弹谱（纯六线谱 / 多页）」双模板</li>
               <li>自动从整段 AI 回复中提取 JSON，支持新建或追加到当前曲谱</li>
-              <li>同样兼容直接粘贴 `.xianpu.json` 进行跨设备分享</li>
+              <li>同样兼容直接粘贴 <code>.xianpu.json</code> 进行跨设备分享</li>
             </ul>
           </article>
 
@@ -211,9 +211,9 @@
             <h3>左手和弦标记与按调自定义指法</h3>
             <p>在进唱字位上方或字前精准落点和弦，支持拖拽调整、全谱移调与自定义指法图。</p>
             <ul class="feature-list">
-              <li>内置各调常用和弦快捷条，支持 `Fmaj7`、`G/B`、`Cadd9` 等任意记号</li>
+              <li>内置各调常用和弦快捷条，支持 <code>Fmaj7</code>、<code>G/B</code>、<code>Cadd9</code> 等任意记号</li>
               <li>按调号自定义左手和弦，可视化编辑六弦品位与指法编号</li>
-              <li>支持 `♭-1` / `♯+1` 半音移调与按目标调名批量转调</li>
+              <li>支持 <code>♭-1</code> / <code>♯+1</code> 半音移调与按目标调名批量转调</li>
             </ul>
           </article>
 
@@ -236,6 +236,27 @@
               <li>自动分析前奏/主歌/副歌/桥段结构，支持段落排序与引用段插入</li>
               <li>多段主歌歌词叠行显示，配备专用字位对齐编辑器</li>
               <li>合行紧凑 / 逐句单行 / 自动双栏自由切换，适配 13 寸小屏与高分屏</li>
+            </ul>
+          </article>
+          <article class="feature-card">
+            <span class="feature-tag">练琴辅助</span>
+            <h3>练琴专注模式、自动滚屏与节拍器</h3>
+            <p>按 <kbd>F5</kbd> 一键进入练琴模式，隐藏编辑栏、放大谱面，看谱与打拍子两不误。</p>
+            <ul class="feature-list">
+              <li>多档速度自动滚屏，<kbd>Space</kbd> 随时暂停 / 继续</li>
+              <li>零依赖木鱼音色节拍器，联动谱头 BPM，支持 4/4、3/4、6/8</li>
+              <li>A4 智能分页打印 / 导出 PDF，高清 PNG 长图无选中框</li>
+            </ul>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-tag">曲库与数据</span>
+            <h3>本地曲库、自动快照与多设备同步</h3>
+            <p>谱头直接编辑歌名、原唱、调号与 BPM，所有曲谱只保存在你自己的电脑上。</p>
+            <ul class="feature-list">
+              <li>按歌名、原唱、调号、分类或歌词关键词实时搜索，支持收藏与分类</li>
+              <li>自定义数据目录（可指向网盘同步盘），每次保存自动保留最近 5 份历史快照</li>
+              <li>主谱面 <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> 撤销重做，一键导出整库 / 从备份恢复</li>
             </ul>
           </article>
         </div>
@@ -277,8 +298,12 @@
                 <td>随时撤销或重做主谱面和弦、移调、改词与段落编排操作</td>
               </tr>
               <tr>
+                <td><kbd>F5</kbd></td>
+                <td>进入 / 退出练琴专注模式（隐藏编辑栏，浮出滚屏与节拍器）</td>
+              </tr>
+              <tr>
                 <td><kbd>Space</kbd>（自动滚屏时）</td>
-                <td>练琴看谱自动滚屏过程中随时暂停 / 继续滚动，配合底部节拍器与 A4 打印/PDF 输出</td>
+                <td>练琴看谱自动滚屏过程中随时暂停 / 继续滚动，可与节拍器同时使用</td>
               </tr>
               <tr>
                 <td>点击常用和弦 + 连点填谱</td>
@@ -286,7 +311,7 @@
               </tr>
               <tr>
                 <td>拖拽和弦 / 拖入文件</td>
-                <td>鼠标直接拖动已放置和弦换位；拖入 `.lrc` / `.txt` / `.xianpu.json` 直接打开</td>
+                <td>鼠标直接拖动已放置和弦换位；拖入 <code>.lrc</code> / <code>.txt</code> / <code>.xianpu.json</code> 直接打开</td>
               </tr>
             </tbody>
           </table>
@@ -322,7 +347,7 @@
               <ul class="download-notes">
                 <li>每用户（Per-User）安装至 <code>%LocalAppData%\Programs\StringNote</code>，无需管理员权限与 UAC 弹窗</li>
                 <li>自动关联 <code>.xianpu.json</code> 曲谱文件，双击即可打开</li>
-                <li>内置 GitHub Releases 更新检测，支持应用内静默覆盖升级</li>
+                <li>内置 GitHub Releases 更新检测，支持应用内静默覆盖升级（旧 Beta 版可直接升级到正式版，曲库数据保留）</li>
               </ul>
             </div>
             <div class="download-actions">
