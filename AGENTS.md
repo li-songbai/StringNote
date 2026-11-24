@@ -19,7 +19,7 @@
 StringNote/
 ├── app/Xianpu.Desktop/          # 核心 WPF 桌面应用（.NET 10）
 │   ├── ViewModels/              # MVVM 视图模型（CommunityToolkit.Mvvm）：MainViewModel、PracticeViewModel
-│   ├── Services/                # 纯逻辑应用服务：SongUndoManager 等
+│   ├── Services/                # 纯逻辑应用服务：SongUndoManager（撤销/重做）、IDialogService / WpfDialogService（弹窗抽象）
 │   ├── Models.cs                # 数据模型：LibraryData、SongModel、LyricLine、ChordPlacement、TabSection/TabBar/TabNote 等
 │   ├── LibraryStore.cs          # 本地曲库持久化（%LocalAppData%\Xianpu\library.json，支持 XIANPU_DATA_DIR 覆盖）与 .xianpu.json 导入导出
 │   ├── MainWindow.xaml(.cs)     # 主窗口生命周期、选歌协调与视口缩放（按职责拆分为 MainWindow.ChordPopover.cs / MainWindow.EditingAndIO.cs / MainWindow.Library.cs / MainWindow.UndoAndSettings.cs / MainWindow.Practice.cs / MainWindow.UpdatesAndChrome.cs）
@@ -42,10 +42,10 @@ StringNote/
 │   ├── AppDialogs.cs            # 统一卡片式无边框弹窗工厂与设计令牌（颜色、按钮、圆角、阴影）
 │   ├── TrayService.cs           # Windows 系统托盘图标与最小化驻留服务
 │   ├── UpdateService.cs         # 基于 GitHub Releases API 的自动检查更新与静默覆盖安装
-│   └── Assets/StringNote.ico    # 应用图标（同时作为 EmbeddedResource 嵌入）
+│   └── Assets/                  # StringNote.ico（多尺寸应用/托盘/安装包图标，EmbeddedResource）、logo64.png（顶栏品牌标识，WPF Resource）
 ├── installer/StringNote.iss     # Inno Setup 6 安装包脚本（Per-User 免 UAC 安装、.xianpu.json 关联）
-├── tests/Xianpu.Desktop.Tests/  # 核心纯逻辑 xUnit 单元测试（移调、LRC、段落分析、AI 导入、曲库备份）
-├── docs/                        # GitHub Pages 静态项目官网（https://li-songbai.github.io/StringNote/）
+├── tests/Xianpu.Desktop.Tests/  # xUnit 单元测试：CoreLogicTests（移调、LRC、段落分析、AI 导入、曲库备份）、ViewModelTests
+├── docs/                        # GitHub Pages 静态官网（index.html / styles.css / app.js / logo.png / favicon.png；app.js 通过 releases/latest 仅展示正式版）
 ├── .github/workflows/
 │   ├── ci.yml                   # Push/PR 自动在 windows-latest 上验证 .NET 10 Release 构建与单元测试
 │   └── release.yml              # 推送 v* 标签或手动触发：Windows 构建 + 便携包 + Inno 安装包 + GitHub Release
@@ -66,7 +66,7 @@ StringNote/
   - 文本层级：标题 `#1E293B`、正文 `#334155`、次要 `#64748B`
   - 警示色：`#DC2626`（Hover `#B91C1C`）
 - **弹窗规范**：新弹窗统一使用 `AppDialogs.CreateCardWindow(...)` 创建无边框圆角卡片窗口，并按 `SystemParameters.WorkArea` 限制最大宽高，保证 13 寸小屏（如 1366×768 / 125%–150% 缩放）完整可见。
-- **零外部 NuGet 依赖**：当前项目仅使用 .NET 10 BCL + WPF + WinForms，尽量避免引入不必要的第三方包，以保持单文件体积精简。
+- **最小化 NuGet 依赖**：除微软官方 `CommunityToolkit.Mvvm` 外，仅使用 .NET 10 BCL + WPF + WinForms；新增第三方包前需充分评估，以保持单文件体积精简。
 
 ### 3.2 数据与兼容性
 - **本地数据路径**：默认 `%LocalAppData%\Xianpu\library.json`，测试或隔离环境可通过环境变量 `XIANPU_DATA_DIR` 指定目录。
@@ -95,6 +95,9 @@ pwsh -ExecutionPolicy Bypass -File .\Build.ps1
 pwsh -ExecutionPolicy Bypass -File .\Build.ps1 -SelfContained -Version 1.0.0
 ```
 
+### 分支与合并流程
+- `main` 已开启分支保护，要求 `build-windows` 检查通过；所有改动请走 `feature 分支 → PR → CI 通过 → 合并`。
+
 ### 发布新版本
 1. 更新 `app/Xianpu.Desktop/Xianpu.Desktop.csproj` 中的 `<Version>`。
 2. 同步更新 `README.md`（及必要时更新 `docs/` 官网展示内容）。
@@ -103,7 +106,8 @@ pwsh -ExecutionPolicy Bypass -File .\Build.ps1 -SelfContained -Version 1.0.0
    git tag v1.0.1
    git push origin main --tags
    ```
-   版本号含 `-`（如 `beta`）会自动标记为 GitHub Pre-release；`UpdateService` 会兼容正式版与 Pre-release 检查更新。
+   版本号含 `-`（如 `beta`）会自动标记为 GitHub Pre-release。注意：`UpdateService` 与官网 `docs/app.js` 均通过 `releases/latest` 获取更新，**只会推送正式版**，Pre-release 仅供手动下载测试。
+4. 安装包 `AppId` 与安装目录（`%LocalAppData%\Programs\StringNote`）不得变更，否则旧版本无法原地覆盖升级。
 
 ---
 
