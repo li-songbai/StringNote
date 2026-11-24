@@ -92,7 +92,7 @@ dotnet build app/Xianpu.Desktop/Xianpu.Desktop.csproj
 pwsh -ExecutionPolicy Bypass -File .\Build.ps1
 
 # 自包含单文件打包 + Inno Setup 安装包（需安装 Inno Setup 6）
-pwsh -ExecutionPolicy Bypass -File .\Build.ps1 -SelfContained -Version 0.1.0-beta.8
+pwsh -ExecutionPolicy Bypass -File .\Build.ps1 -SelfContained -Version 1.0.0
 ```
 
 ### 发布新版本
@@ -100,7 +100,7 @@ pwsh -ExecutionPolicy Bypass -File .\Build.ps1 -SelfContained -Version 0.1.0-bet
 2. 同步更新 `README.md`（及必要时更新 `docs/` 官网展示内容）。
 3. 提交代码并打上语义化标签推送，触发 `.github/workflows/release.yml` 自动构建并发布到 GitHub Releases：
    ```bash
-   git tag v0.1.0-beta.9
+   git tag v1.0.1
    git push origin main --tags
    ```
    版本号含 `-`（如 `beta`）会自动标记为 GitHub Pre-release；`UpdateService` 会兼容正式版与 Pre-release 检查更新。
