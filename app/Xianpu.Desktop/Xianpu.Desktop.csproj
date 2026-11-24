@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Assets\StringNote.ico" />
+    <InternalsVisibleTo Include="Xianpu.Desktop.Tests" />
   </ItemGroup>
 
 </Project>
