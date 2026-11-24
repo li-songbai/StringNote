@@ -434,6 +434,7 @@ public sealed class LibraryStore
 
     public static void NormalizeSong(SongModel song)
     {
+        song.Artist = (song.Artist ?? "").Trim();
         song.Bpm = song.Bpm <= 0 ? 0 : Math.Clamp(song.Bpm, 30, 240);
         song.Lines ??= [];
         foreach (var line in song.Lines)

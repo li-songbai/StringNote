@@ -72,6 +72,7 @@ public sealed class CoreLogicTests
         var song = LrcImporter.ImportText(lrc, "fallback");
 
         Assert.Equal("秋日木吉他", song.Title);
+        Assert.Equal("测试歌手", song.Artist);
         Assert.Equal(2, song.Lines.Count);
         Assert.Equal("晚风吹过旧窗台", song.Lines[0].Text);
         Assert.Equal("木吉他轻轻响起来", song.Lines[1].Text);

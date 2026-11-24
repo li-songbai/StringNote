@@ -148,10 +148,14 @@ public static partial class LrcImporter
         var title = metadata.TryGetValue("ti", out var ti) && !string.IsNullOrWhiteSpace(ti)
             ? ti
             : (!string.IsNullOrWhiteSpace(defaultTitle) ? defaultTitle.Trim() : "未命名歌曲");
+        var artist = metadata.TryGetValue("ar", out var ar) && !string.IsNullOrWhiteSpace(ar)
+            ? ar.Trim()
+            : "";
 
         var song = new SongModel
         {
             Title = title,
+            Artist = artist,
             OriginalKey = originalKey,
             SelectedKey = !string.IsNullOrWhiteSpace(selectedKey) ? selectedKey : originalKey,
             Capo = capo,

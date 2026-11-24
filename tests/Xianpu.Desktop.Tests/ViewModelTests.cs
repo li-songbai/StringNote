@@ -46,6 +46,7 @@ public sealed class ViewModelTests
         var s1 = new SongModel
         {
             Title = "晴天",
+            Artist = "周杰伦",
             SelectedKey = "G",
             Category = "流行",
             Favorite = true,
@@ -55,6 +56,7 @@ public sealed class ViewModelTests
         var s2 = new SongModel
         {
             Title = "成都",
+            Artist = "赵雷",
             SelectedKey = "C",
             Category = "民谣",
             Favorite = false,
@@ -63,6 +65,11 @@ public sealed class ViewModelTests
         };
         vm.Library.Songs.Add(s1);
         vm.Library.Songs.Add(s2);
+
+        vm.SearchQuery = "赵雷";
+        var byArtist = vm.ComputeFilteredSongs();
+        Assert.Single(byArtist);
+        Assert.Equal("成都", byArtist[0].Title);
 
         vm.SearchQuery = "小黄花";
         var byLyric = vm.ComputeFilteredSongs();
@@ -77,8 +84,15 @@ public sealed class ViewModelTests
 
         var dup = MainViewModel.CreateDuplicateSong(s1);
         Assert.NotEqual(s1.Id, dup.Id);
+        Assert.Equal("周杰伦", dup.Artist);
         Assert.Equal(74, dup.Bpm);
         Assert.Equal("晴天 (副本)", dup.Title);
+
+        Assert.False(vm.IsPracticeMode);
+        vm.TogglePracticeModeCommand.Execute(null);
+        Assert.True(vm.IsPracticeMode);
+        vm.EnterEditModeCommand.Execute(null);
+        Assert.False(vm.IsPracticeMode);
 
         // UndoCommand / RedoCommand CanExecute reactivity
         vm.UndoManager.Reset(s1);

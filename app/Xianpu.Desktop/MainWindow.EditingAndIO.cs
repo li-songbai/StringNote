@@ -791,6 +791,8 @@ public partial class MainWindow
         if (_selectedSong is null) return;
         _headerSaveDebounceTimer.Stop();
         _selectedSong.Title = TitleBox.Text.Trim();
+        if (ArtistBox is not null)
+            _selectedSong.Artist = ArtistBox.Text.Trim();
         _selectedSong.OriginalKey = OriginalKeyBox.Text.Trim();
         _selectedSong.SelectedKey = SelectedKeyBox.Text.Trim();
         var capo = CapoBox.Text.Trim();

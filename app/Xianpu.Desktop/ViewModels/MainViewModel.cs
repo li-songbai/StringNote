@@ -57,6 +57,9 @@ public sealed partial class MainViewModel : ObservableObject
     private bool _isSearchEmpty = true;
 
     [ObservableProperty]
+    private bool _isPracticeMode;
+
+    [ObservableProperty]
     private string _undoToolTip = "撤销上一步谱面编辑 (Ctrl+Z)";
 
     [ObservableProperty]
@@ -70,6 +73,7 @@ public sealed partial class MainViewModel : ObservableObject
     public event Action? CategoryOptionsRefreshRequested;
     public event Action<SongModel>? SelectSongRequested;
     public event Action<int>? BpmChangedWhileEditing;
+    public event Action<bool>? PracticeModeChanged;
 
     public void AttachDialogService(IDialogService dialogs) => _dialogs = dialogs;
 
@@ -156,6 +160,20 @@ public sealed partial class MainViewModel : ObservableObject
             : SelectedSong!.Title.Trim();
         CaptionSongTitle = $"· {title}";
     }
+
+    partial void OnIsPracticeModeChanged(bool value)
+    {
+        PracticeModeChanged?.Invoke(value);
+    }
+
+    [RelayCommand]
+    private void EnterEditMode() => IsPracticeMode = false;
+
+    [RelayCommand]
+    private void EnterPracticeMode() => IsPracticeMode = true;
+
+    [RelayCommand]
+    private void TogglePracticeMode() => IsPracticeMode = !IsPracticeMode;
 
     [RelayCommand(CanExecute = nameof(CanUndo))]
     private void Undo() => UndoRequested?.Invoke();
@@ -311,6 +329,7 @@ public sealed partial class MainViewModel : ObservableObject
             .Where(song =>
                 string.IsNullOrWhiteSpace(query) ||
                 (song.Title ?? "").Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                (song.Artist ?? "").Contains(query, StringComparison.OrdinalIgnoreCase) ||
                 (song.SelectedKey ?? "").Contains(query, StringComparison.OrdinalIgnoreCase) ||
                 (song.OriginalKey ?? "").Contains(query, StringComparison.OrdinalIgnoreCase) ||
                 (song.Category ?? "").Contains(query, StringComparison.OrdinalIgnoreCase) ||
@@ -336,6 +355,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         Id = Guid.NewGuid().ToString("N"),
         Title = string.IsNullOrWhiteSpace(source.Title) ? "未命名歌曲 (副本)" : source.Title + " (副本)",
+        Artist = source.Artist,
         OriginalKey = source.OriginalKey,
         SelectedKey = source.SelectedKey,
         Capo = source.Capo,

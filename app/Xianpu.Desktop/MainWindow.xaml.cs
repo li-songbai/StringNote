@@ -78,6 +78,7 @@ public partial class MainWindow : Window
             if (_metronome.IsRunning)
                 _metronome.Bpm = bpm;
         };
+        _vm.PracticeModeChanged += ApplyPracticeMode;
         ApplyAdaptiveInitialWindowSize();
         LoadWindowIcon();
 
@@ -343,6 +344,7 @@ public partial class MainWindow : Window
         _selectedSong.UpdatedAt = DateTime.Now;
 
         if (e.PropertyName is nameof(SongModel.Title)
+            or nameof(SongModel.Artist)
             or nameof(SongModel.OriginalKey)
             or nameof(SongModel.SelectedKey)
             or nameof(SongModel.Capo)

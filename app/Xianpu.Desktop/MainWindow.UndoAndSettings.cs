@@ -11,6 +11,13 @@ public partial class MainWindow
     {
         base.OnPreviewKeyDown(e);
 
+        if (e.Key == Key.F5 && Keyboard.Modifiers == ModifierKeys.None && Keyboard.FocusedElement is not TextBoxBase)
+        {
+            _vm.TogglePracticeModeCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.Space &&
             _autoScrollEngaged &&
             Keyboard.Modifiers == ModifierKeys.None &&
@@ -104,6 +111,7 @@ public partial class MainWindow
         try
         {
             _selectedSong.Title = restored.Title;
+            _selectedSong.Artist = restored.Artist;
             _selectedSong.OriginalKey = restored.OriginalKey;
             _selectedSong.SelectedKey = restored.SelectedKey;
             _selectedSong.Capo = restored.Capo;
