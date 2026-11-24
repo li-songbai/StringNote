@@ -106,6 +106,7 @@ public partial class MainWindow
             return;
 
         ChordPopover.IsOpen = false;
+        HideInlineLyricOverlay();
         _restoringUndo = true;
         _initializing = true;
         try

@@ -122,14 +122,64 @@ public static class UpdateService
         }
     }
 
+    internal static int CompareVersionStrings(string latestRaw, string currentRaw)
+    {
+        var latestNum = TryParseVersion(latestRaw, out var parsedLatest) ? parsedLatest : new Version(0, 0, 0, 0);
+        var currentNum = TryParseVersion(currentRaw, out var parsedCurrent) ? parsedCurrent : new Version(0, 0, 0, 0);
+        return CompareVersions(latestRaw, currentRaw, latestNum, currentNum);
+    }
+
     private static int CompareVersions(string latestRaw, string currentRaw, Version latestNum, Version currentNum)
     {
         var numCmp = latestNum.CompareTo(currentNum);
         if (numCmp != 0) return numCmp;
-        var latestPre = latestRaw.Contains('-');
-        var currentPre = currentRaw.Contains('-');
-        if (latestPre != currentPre) return currentPre ? 1 : -1;
-        return string.Compare(latestRaw, currentRaw, StringComparison.OrdinalIgnoreCase);
+
+        var latestPre = ExtractPreRelease(latestRaw);
+        var currentPre = ExtractPreRelease(currentRaw);
+        var hasLatestPre = latestPre.Length > 0;
+        var hasCurrentPre = currentPre.Length > 0;
+
+        if (!hasLatestPre && !hasCurrentPre) return 0;
+        if (hasLatestPre != hasCurrentPre) return hasCurrentPre ? 1 : -1;
+
+        var latestParts = latestPre.Split('.');
+        var currentParts = currentPre.Split('.');
+        var minLen = Math.Min(latestParts.Length, currentParts.Length);
+        for (var i = 0; i < minLen; i++)
+        {
+            var lp = latestParts[i];
+            var cp = currentParts[i];
+            var lIsNum = int.TryParse(lp, out var lNum);
+            var cIsNum = int.TryParse(cp, out var cNum);
+            if (lIsNum && cIsNum)
+            {
+                var cmp = lNum.CompareTo(cNum);
+                if (cmp != 0) return cmp;
+            }
+            else if (lIsNum != cIsNum)
+            {
+                // Per SemVer 2.0, numeric identifiers have lower precedence than non-numeric identifiers
+                return lIsNum ? -1 : 1;
+            }
+            else
+            {
+                var cmp = string.Compare(lp, cp, StringComparison.OrdinalIgnoreCase);
+                if (cmp != 0) return cmp;
+            }
+        }
+
+        return latestParts.Length.CompareTo(currentParts.Length);
+    }
+
+    private static string ExtractPreRelease(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return "";
+        var cleaned = raw.Trim();
+        var plusIdx = cleaned.IndexOf('+');
+        if (plusIdx >= 0)
+            cleaned = cleaned[..plusIdx];
+        var dashIdx = cleaned.IndexOf('-');
+        return dashIdx >= 0 && dashIdx + 1 < cleaned.Length ? cleaned[(dashIdx + 1)..] : "";
     }
 
     public static async Task<string> DownloadAssetAsync(

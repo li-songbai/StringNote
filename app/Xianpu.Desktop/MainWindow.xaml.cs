@@ -130,13 +130,14 @@ public partial class MainWindow : Window
         };
         ScoreSurface.SelectionChanged += UpdateActionStates;
         ScoreSurface.LineEditRequested += EditLyricLine;
+        ScoreSurface.InlineLyricEditRequested += OpenInlineLyricEditor;
         ScoreSurface.CharacterSlotClicked += OnCharacterSlotClicked;
         ScoreSurface.QuickTypeStarted += OnQuickTypeStarted;
         ScoreSurface.TabSectionEditRequested += EditTabSection;
         ScoreSurface.TabSectionDuplicateRequested += DuplicateTabSection;
         ScoreSurface.TabSectionDeleteRequested += DeleteTabSection;
         ScoreSurface.TabSectionInsertRequested += InsertNewTabSection;
-        ScoreSurface.AddAltLyricRequested += idx => OpenStackedLyricEditor(idx, addNewRow: true);
+        ScoreSurface.AddAltLyricRequested += AddAltLyricInline;
         ScoreSurface.PartArrangeRequested += OpenPartArrangeDialog;
         ScoreSurface.InsertPartAfterRequested += OpenInsertPartDialog;
         ScoreSurface.StatusMessageRequested += SetStatus;
@@ -265,6 +266,7 @@ public partial class MainWindow : Window
 
     private void SelectSong(SongModel song)
     {
+        CommitInlineLyricEdit(refocusSurface: false);
         FlushPendingHeaderSave();
 
         if (_selectedSong is not null)
@@ -373,7 +375,18 @@ public partial class MainWindow : Window
         var available = Math.Max(320, ScoreScrollViewer.ActualWidth - 48);
         var fitScale = Math.Clamp(available / paperWidth, 0.50, 1.0);
         var scale = _manualZoom ?? fitScale;
-        ScoreSurface.LayoutTransform = Math.Abs(scale - 1.0) < 0.01 ? Transform.Identity : new ScaleTransform(scale, scale);
+        var transform = Math.Abs(scale - 1.0) < 0.01 ? Transform.Identity : new ScaleTransform(scale, scale);
+
+        if (ScorePaperCard is not null)
+        {
+            ScorePaperCard.Width = paperWidth;
+            ScorePaperCard.LayoutTransform = transform;
+            ScoreSurface.LayoutTransform = Transform.Identity;
+        }
+        else
+        {
+            ScoreSurface.LayoutTransform = transform;
+        }
 
         _vm.Practice.ZoomPercentText = _manualZoom is null ? $"适应 {scale * 100:0}%" : $"{scale * 100:0}%";
     }
@@ -410,10 +423,12 @@ public partial class MainWindow : Window
     private void ScoreScrollViewer_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
         if (ScoreScrollViewer is null || ScoreSurface is null) return;
-        if (IsInsideScrollBar(e.OriginalSource as DependencyObject)) return;
+        var origin = e.OriginalSource as DependencyObject;
+        if (IsInsideScrollBar(origin)) return;
 
         var isMiddle = e.ChangedButton == MouseButton.Middle;
         var isBlankLeft = e.ChangedButton == MouseButton.Left &&
+                          !IsInsideInteractiveControl(origin) &&
                           !ScoreSurface.IsPointInteractive(e.GetPosition(ScoreSurface));
 
         if (isMiddle || isBlankLeft)
@@ -461,10 +476,26 @@ public partial class MainWindow : Window
         while (source is not null)
         {
             if (source is ScrollBar) return true;
-            source = VisualTreeHelper.GetParent(source);
+            source = GetVisualOrLogicalParent(source);
         }
         return false;
     }
+
+    private static bool IsInsideInteractiveControl(DependencyObject? source)
+    {
+        while (source is not null)
+        {
+            if (source is ButtonBase or TextBoxBase or ComboBox or Selector)
+                return true;
+            source = GetVisualOrLogicalParent(source);
+        }
+        return false;
+    }
+
+    private static DependencyObject? GetVisualOrLogicalParent(DependencyObject source) =>
+        source is Visual or System.Windows.Media.Media3D.Visual3D
+            ? VisualTreeHelper.GetParent(source)
+            : LogicalTreeHelper.GetParent(source);
 
     private string? PromptLyrics(string title, string label, string initial = "", double height = 360) =>
         AppDialogs.PromptLyrics(this, title, label, initial, height);

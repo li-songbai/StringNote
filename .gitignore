@@ -3,5 +3,7 @@
 .local-data/
 app/Xianpu.Desktop/bin/
 app/Xianpu.Desktop/obj/
+tests/*/bin/
+tests/*/obj/
 app/startup.log
 dist/

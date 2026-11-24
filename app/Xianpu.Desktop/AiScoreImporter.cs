@@ -37,6 +37,14 @@ internal static class AiScoreImporter
         @"^(\d{1,2})\s*(s|/|\\|h|p)\s*(\d{1,2}|[xX])$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    private static readonly Regex CjkMultiSpaceRegex = new(
+        @"(?<=[\u4e00-\u9fff])[ \t]{2,}(?=[\u4e00-\u9fff])",
+        RegexOptions.Compiled);
+
+    private static readonly Regex InteriorMultiSpaceRegex = new(
+        @"(?<=\S)[ \t]{2,}",
+        RegexOptions.Compiled);
+
     public const string VocalPrompt = """
 请仔细识别我上传的吉他【弹唱谱】图片，并仅输出一个合法的 JSON 代码块（```json ... ```），不要额外解释，以便我直接导入到《弦笺》软件中。
 
@@ -54,8 +62,8 @@ internal static class AiScoreImporter
       "repeat": 1,
       "lines": [
         {
-          "main": "oh [G]Honey 我脑海里全[D]都是你 [Em]",
-          "alt": ["   Honey 你目光里充满忧郁"]
+          "main": "[Em]给我再去相[C]信的勇气 越过[G]谎言去拥抱[D]你",
+          "alt": ["给我再去相信的勇气 越过谎言去拥抱你"]
         }
       ]
     }
@@ -69,7 +77,7 @@ internal static class AiScoreImporter
    - `[C]爱` 表示和弦落在这个字上方；
    - `[^Em]我` 表示和弦进在当前字之前（空拍进唱）；
    - `都是你 [Em]` 表示和弦落在该句结尾延音拍。
-2. 如遇多段歌词上下对齐（主歌第1遍/第2遍叠行），第一遍写 `main`，其余各遍按顺序写进 `alt` 数组，可保留少量前置空格以维持对齐。
+2. 如遇多段歌词上下对齐（主歌第1遍/第2遍叠行），第一遍写 `main`，其余各遍按顺序写进 `alt` 数组。重要：软件会自动剥离 `main` 中的 `[和弦]` 标签后再将 `main` 与 `alt` 按字对齐，因此 `alt` 中只写干净纯歌词，严禁为了视觉对齐 `main` 里的 `[和弦]` 而在行首或字间塞入多余空格！（仅当第2遍比第1遍少唱开头弱起词时，才按少唱的字数留出等量前置空格）。
 3. 标题、原调（如 `1=B` -> `"B"`）、选调指法（如 `用G调指法` -> `"G"`）和变调夹（如 `"4品"`）请如实填写；无需输出六线谱扫弦伴奏小节，`tabs` 留空即可（只有明显属于纯器乐前奏/间奏的独奏六线谱小节时才可放入 `tabs`）。
 4. 如果图片有多页长谱，每次可只识别我发的这几页，我会在软件里逐页合并。
 """;
@@ -410,13 +418,13 @@ internal static class AiScoreImporter
                 {
                     if (item.ValueKind != JsonValueKind.String) continue;
                     ParseInlineChordLine(item.GetString() ?? "", out var cleanAlt, out _);
-                    altLyrics.Add(cleanAlt);
+                    altLyrics.Add(NormalizeAiAltLyric(rawMain, mainText, cleanAlt));
                 }
             }
             else if (altEl.ValueKind == JsonValueKind.String)
             {
                 ParseInlineChordLine(altEl.GetString() ?? "", out var cleanAlt, out _);
-                altLyrics.Add(cleanAlt);
+                altLyrics.Add(NormalizeAiAltLyric(rawMain, mainText, cleanAlt));
             }
         }
 
@@ -431,6 +439,27 @@ internal static class AiScoreImporter
             PartTitle = partTitle.Trim(),
             RepeatCount = Math.Clamp(repeat, 1, 16)
         };
+    }
+
+    private static string NormalizeAiAltLyric(string rawMain, string mainText, string cleanAlt)
+    {
+        if (string.IsNullOrEmpty(cleanAlt) || !InlineChordRegex.IsMatch(rawMain))
+            return cleanAlt;
+
+        // If main starts directly with an inline [Chord] (no pickup word before '['),
+        // any leading spaces in alt were inserted by the LLM to sit beneath '[Chord]'.
+        if (!mainText.StartsWith(' ') && rawMain.AsSpan().TrimStart().StartsWith("[", StringComparison.Ordinal))
+            cleanAlt = cleanAlt.TrimStart();
+
+        // If plain mainText does not contain multi-space runs, strip chord-padding spaces inside alt:
+        // 2+ spaces between CJK characters collapse to "", and any remaining 2+ spaces collapse to " ".
+        if (!mainText.Contains("  ", StringComparison.Ordinal))
+        {
+            cleanAlt = CjkMultiSpaceRegex.Replace(cleanAlt, "");
+            cleanAlt = InteriorMultiSpaceRegex.Replace(cleanAlt, " ");
+        }
+
+        return cleanAlt;
     }
 
     private static void ParseInlineChordLine(string rawLine, out string plainText, out List<ChordPlacement> chords)

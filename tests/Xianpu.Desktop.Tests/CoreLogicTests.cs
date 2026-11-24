@@ -235,4 +235,136 @@ public sealed class CoreLogicTests
             try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void AiScoreImporter_StripsChordPaddingSpacesInAltLyrics_WhilePreservingPickupIndent()
+    {
+        const string json = """
+        {
+          "mode": "vocal",
+          "title": "夜空中最亮的星",
+          "parts": [
+            {
+              "title": "副歌",
+              "repeat": 2,
+              "lines": [
+                {
+                  "main": "[Em]给我再去相[C]信的勇气 越过[G]谎言去拥抱[D]你 每当 我",
+                  "alt": ["    给我再去相信     的勇气 越过     谎言去拥抱     你 每当 我"]
+                },
+                {
+                  "main": "[G]叹息 OH [G]夜空中最亮的星",
+                  "alt": ["    哪里 OH    夜空中最亮的星"]
+                },
+                {
+                  "main": "oh [G]Honey 我脑海里全[D]都是你",
+                  "alt": ["   Honey 你目光里充    满忧郁"]
+                }
+              ]
+            }
+          ]
+        }
+        """;
+
+        var result = AiScoreImporter.Parse(json);
+        Assert.Equal(3, result.Song.Lines.Count);
+
+        Assert.Equal("给我再去相信的勇气 越过谎言去拥抱你 每当 我", result.Song.Lines[0].Text);
+        Assert.Equal("给我再去相信的勇气 越过谎言去拥抱你 每当 我", result.Song.Lines[0].AltLyrics[0]);
+
+        Assert.Equal("叹息 OH 夜空中最亮的星", result.Song.Lines[1].Text);
+        Assert.Equal("哪里 OH 夜空中最亮的星", result.Song.Lines[1].AltLyrics[0]);
+
+        Assert.Equal("oh Honey 我脑海里全都是你", result.Song.Lines[2].Text);
+        Assert.Equal("   Honey 你目光里充满忧郁", result.Song.Lines[2].AltLyrics[0]);
+    }
+
+    [Fact]
+    public void UpdateService_CompareVersionStrings_HandlesMultiDigitPreReleaseAndStable()
+    {
+        Assert.True(UpdateService.CompareVersionStrings("v0.1.0-beta.10", "v0.1.0-beta.9") > 0);
+        Assert.True(UpdateService.CompareVersionStrings("0.1.0-beta.2", "0.1.0-beta.10") < 0);
+        Assert.True(UpdateService.CompareVersionStrings("v1.0.0", "v1.0.0-beta.10") > 0);
+        Assert.True(UpdateService.CompareVersionStrings("v1.0.0-rc.1", "v1.0.0-beta.99") > 0);
+        Assert.True(UpdateService.CompareVersionStrings("v1.0.1", "v1.0.0") > 0);
+        Assert.Equal(0, UpdateService.CompareVersionStrings("v1.0.0", "1.0.0+build123"));
+    }
+
+    [Fact]
+    public void LyricLineEditHelper_ApplyMainLyricEdit_ShiftsChordsAcrossMultipleEdits()
+    {
+        var line = new LyricLine
+        {
+            Text = "给我再去相信的勇器",
+            Chords =
+            [
+                new ChordPlacement { Position = 0, BeforeChar = true, Name = "Em", ShapeId = "Em" },
+                new ChordPlacement { Position = 0, BeforeChar = false, Name = "G", ShapeId = "G" },
+                new ChordPlacement { Position = 5, BeforeChar = false, Name = "C", ShapeId = "C" },   // '信'
+                new ChordPlacement { Position = 8, BeforeChar = false, Name = "D", ShapeId = "D" },   // '器' -> '气'
+                new ChordPlacement { Position = 9, BeforeChar = false, Name = "Em7", ShapeId = "Em7" } // 句尾延音
+            ]
+        };
+
+        LyricLineEditHelper.ApplyMainLyricEdit(line, "噢 给我再去更相信的勇气吧");
+
+        Assert.Equal("噢 给我再去更相信的勇气吧", line.Text);
+        // Opening BeforeChar pickup chord stays at 0, while chord on '给' moves to '给' (index 2)
+        Assert.Contains(line.Chords, c => c.Name == "Em" && c.BeforeChar && c.Position == 0);
+        Assert.Contains(line.Chords, c => c.Name == "G" && !c.BeforeChar && c.Position == 2);
+        // '信' moved from index 5 to index 8 ("噢 给我再去更相" = 8 chars)
+        Assert.Contains(line.Chords, c => c.Name == "C" && c.Position == 8);
+        // Replaced '器' -> '气' at index 11
+        Assert.Contains(line.Chords, c => c.Name == "D" && c.Position == 11);
+        // Trailing sustain chord stays at new line end (length 13)
+        Assert.Contains(line.Chords, c => c.Name == "Em7" && c.Position == line.Text.Length);
+    }
+
+    [Fact]
+    public void LyricLineEditHelper_SplitLineAt_SplitsChordsAltLyricsAndShiftsInterludes()
+    {
+        var song = new SongModel
+        {
+            Lines =
+            [
+                new LyricLine
+                {
+                    PartTitle = "副歌",
+                    RepeatCount = 2,
+                    Text = "有一颗透明的心灵 和会流泪的眼睛",
+                    AltLyrics = ["有痛苦都留在心里 也不愿忘记你的眼睛"],
+                    Chords =
+                    [
+                        new ChordPlacement { Position = 0, Name = "Em", ShapeId = "Em" },
+                        new ChordPlacement { Position = 7, Name = "C", ShapeId = "C" },
+                        new ChordPlacement { Position = 11, Name = "G", ShapeId = "G" },
+                        new ChordPlacement { Position = 15, Name = "D", ShapeId = "D" }
+                    ]
+                }
+            ],
+            TabSections =
+            [
+                new TabSection { Kind = TabSectionKind.Interlude, InsertAfterLineIndex = 0, Title = "间奏" }
+            ]
+        };
+
+        // Split right before "和会流泪的眼睛" (index 9, right after the space at index 8)
+        var nextIdx = LyricLineEditHelper.SplitLineAt(song, 0, song.Lines[0].Text, 9);
+
+        Assert.Equal(1, nextIdx);
+        Assert.Equal(2, song.Lines.Count);
+
+        Assert.Equal("有一颗透明的心灵", song.Lines[0].Text);
+        Assert.Equal(["Em", "C"], song.Lines[0].Chords.Select(c => c.Name).ToArray());
+        Assert.Equal("有痛苦都留在心里", song.Lines[0].AltLyrics[0]);
+
+        Assert.Equal("和会流泪的眼睛", song.Lines[1].Text);
+        Assert.Equal(["G", "D"], song.Lines[1].Chords.Select(c => c.Name).ToArray());
+        Assert.Equal(2, song.Lines[1].Chords[0].Position); // '流' in "和会流泪的眼睛"
+        Assert.Equal(6, song.Lines[1].Chords[1].Position); // '睛' in "和会流泪的眼睛"
+        Assert.Equal("也不愿忘记你的眼睛", song.Lines[1].AltLyrics[0]);
+
+        // Interlude moved to stay after the second half of the split sentence
+        Assert.Equal(1, song.TabSections[0].InsertAfterLineIndex);
+    }
 }

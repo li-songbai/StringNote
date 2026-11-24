@@ -151,6 +151,10 @@ public partial class MainWindow
     {
         if (sender is not Button { Tag: string chordName } || _selectedSong is null) return;
 
+        CommitInlineLyricEdit(refocusSurface: false);
+        if (LyricEditModeToggle?.IsChecked == true)
+            LyricEditModeToggle.IsChecked = false;
+
         if (ScoreSurface.ContinuousPaintMode)
         {
             if (string.Equals(ScoreSurface.ActiveChordBrush, chordName, StringComparison.OrdinalIgnoreCase))
@@ -186,6 +190,8 @@ public partial class MainWindow
     {
         if (ScoreSurface is null) return;
         var enabled = ContinuousPaintToggle.IsChecked == true;
+        if (enabled && LyricEditModeToggle?.IsChecked == true)
+            LyricEditModeToggle.IsChecked = false;
         ScoreSurface.ContinuousPaintMode = enabled;
         ContinuousPaintToggle.Background = enabled
             ? new SolidColorBrush(Color.FromRgb(234, 243, 237))

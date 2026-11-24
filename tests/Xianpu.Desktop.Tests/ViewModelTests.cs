@@ -160,20 +160,26 @@ public sealed class ViewModelTests
         Assert.Equal(240, song.Bpm);
         Assert.Equal("240", vm.BpmText);
 
+        var filterEvents = 0;
+        vm.FilterStateChanged += () => filterEvents++;
+
         // AddCategoryCommand via IDialogService
         vm.AddCategoryCommand.Execute(null);
         Assert.Contains("演出必弹", vm.Library.Categories);
         Assert.Equal("演出必弹", song.Category);
+        Assert.Equal(1, filterEvents);
 
         // RenameSelectedSongCommand via IDialogService
         fakeDialogs.NextPromptResult = "新歌名";
         vm.RenameSelectedSongCommand.Execute(null);
         Assert.Equal("新歌名", song.Title);
         Assert.Equal("· 新歌名", vm.CaptionSongTitle);
+        Assert.Equal(2, filterEvents);
 
         // ToggleFavoriteCommand
         vm.ToggleFavoriteCommand.Execute(null);
         Assert.True(song.Favorite);
+        Assert.Equal(3, filterEvents);
 
         // DeleteSelectedSongCommand removes song and creates replacement when library becomes empty
         SongModel? selectedNext = null;
@@ -182,6 +188,7 @@ public sealed class ViewModelTests
         Assert.NotNull(selectedNext);
         Assert.DoesNotContain(song, vm.Library.Songs);
         Assert.Single(vm.Library.Songs);
+        Assert.Equal(4, filterEvents);
     }
 
     private sealed class FakeDialogService : IDialogService

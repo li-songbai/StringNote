@@ -348,7 +348,7 @@ public partial class MainWindow
 
         PartArrangeButton.Style = highlight
             ? TryFindResource("AccentOutlineButton") as Style
-            : null;
+            : TryFindResource("TopBarGhostButton") as Style;
     }
 
     private static string FormatLyricsForBatchEdit(SongModel song)
@@ -579,7 +579,7 @@ public partial class MainWindow
         {
             var count = _selectedSong.TabSections.Count;
             if (count == 0)
-                TabSectionButton.Content = "+ 六线谱 (可选)";
+                TabSectionButton.Content = "+ 六线谱";
             else if (!_selectedSong.ShowTabSections)
                 TabSectionButton.Content = $"六线谱 ({count} · 已隐藏)";
             else
@@ -789,6 +789,7 @@ public partial class MainWindow
     private void CommitFields()
     {
         if (_selectedSong is null) return;
+        CommitInlineLyricEdit(refocusSurface: false);
         _headerSaveDebounceTimer.Stop();
         _selectedSong.Title = TitleBox.Text.Trim();
         if (ArtistBox is not null)

@@ -433,9 +433,11 @@
                                 ToolTip="导入 LRC/文本、AI 识谱导入、导入好友谱子或新建空白曲谱" />
 
                         <Button x:Name="UndoButton" Content="↩" Style="{StaticResource TopBarGhostButton}"
+                                WindowChrome.IsHitTestVisibleInChrome="True"
                                 Padding="7,4" Margin="0,0,2,0" FontSize="13"
                                 Command="{Binding UndoCommand}" ToolTip="{Binding UndoToolTip}" />
                         <Button x:Name="RedoButton" Content="↪" Style="{StaticResource TopBarGhostButton}"
+                                WindowChrome.IsHitTestVisibleInChrome="True"
                                 Padding="7,4" Margin="0,0,4,0" FontSize="13"
                                 Command="{Binding RedoCommand}" ToolTip="{Binding RedoToolTip}" />
 
@@ -449,9 +451,11 @@
                             WindowChrome.IsHitTestVisibleInChrome="True">
                         <StackPanel Orientation="Horizontal">
                             <Button x:Name="EditModeButton" Content="✎ 编辑制谱" Padding="11,4" FontSize="11.5" FontWeight="SemiBold"
+                                    WindowChrome.IsHitTestVisibleInChrome="True"
                                     Background="#FFFFFF" BorderBrush="Transparent" Foreground="#1E293B"
                                     Command="{Binding EnterEditModeCommand}" ToolTip="编辑模式：显示曲库与悬浮和弦条（F5 切换）" />
                             <Button x:Name="PracticeModeButton" Content="🎸 练琴看谱" Padding="11,4" FontSize="11.5"
+                                    WindowChrome.IsHitTestVisibleInChrome="True"
                                     Background="Transparent" BorderBrush="Transparent" Foreground="#64748B"
                                     Command="{Binding EnterPracticeModeCommand}" ToolTip="练琴专注模式：隐藏编辑栏，放大谱面视野并浮出滚屏/节拍器（F5 切换）" />
                         </StackPanel>
@@ -460,9 +464,11 @@
                     <!-- Right: Arrange Menu + Save + Export Menu + Settings + Window Controls -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                         <Button x:Name="PartArrangeButton" Content="编排 ▾" Style="{StaticResource TopBarGhostButton}"
+                                WindowChrome.IsHitTestVisibleInChrome="True"
                                 Margin="0,0,2,0" Click="ArrangeMenu_Click"
                                 ToolTip="编辑歌词、段落编排与叠行、排版模式、和弦操作" />
                         <Button Content="保存" Style="{StaticResource TopBarGhostButton}"
+                                WindowChrome.IsHitTestVisibleInChrome="True"
                                 Margin="0,0,4,0" Click="SaveToLibrary_Click" ToolTip="保存当前曲谱到本地曲库" />
                         <Button x:Name="ExportMenuButton" Content="导出 ▾" Style="{StaticResource PrimaryButton}"
                                 WindowChrome.IsHitTestVisibleInChrome="True"
@@ -472,9 +478,11 @@
                         <Border Width="1" Height="18" Background="#E2E8F0" Margin="0,0,4,0" />
 
                         <Button x:Name="SettingsButton" Content="⚙" Style="{StaticResource TopBarGhostButton}"
+                                WindowChrome.IsHitTestVisibleInChrome="True"
                                 Padding="7,4" FontSize="13.5" Margin="0,0,1,0" Click="Settings_Click"
                                 ToolTip="设置与曲库备份（自定义数据路径 / 自动快照 / 整库恢复）" />
                         <Button x:Name="CheckUpdateButton" Content="↻" Style="{StaticResource TopBarGhostButton}"
+                                WindowChrome.IsHitTestVisibleInChrome="True"
                                 Padding="7,4" FontSize="13" Margin="0,0,4,0" Click="CheckUpdate_Click"
                                 ToolTip="检查 GitHub 最新版本" />
 
@@ -666,9 +674,12 @@
                             <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.06" Color="#0F172A" />
                         </Border.Effect>
                         <WrapPanel VerticalAlignment="Center">
-                            <ToggleButton x:Name="ContinuousPaintToggle" Content="✎ 连点" Padding="8,3" Margin="0,2,6,2" FontSize="11.5"
+                            <ToggleButton x:Name="ContinuousPaintToggle" Content="✎ 连点" Padding="8,3" Margin="0,2,5,2" FontSize="11.5"
                                           Checked="ContinuousPaint_Changed" Unchecked="ContinuousPaint_Changed"
                                           ToolTip="开启后：点选一个常用和弦，再连续点击歌词字位批量放置" />
+                            <ToggleButton x:Name="LyricEditModeToggle" Content="Ｉ 改词" Padding="8,3" Margin="0,2,6,2" FontSize="11.5"
+                                          Checked="LyricEditMode_Changed" Unchecked="LyricEditMode_Changed"
+                                          ToolTip="改词模式：开启后单击任意歌词即可直接在纸面上打字改词（默认模式下双击歌词或按 F2 也可原位改词）" />
                             <TextBlock x:Name="PaletteKeyLabel" Text="常用：" FontSize="11.5" FontWeight="SemiBold" Foreground="#64748B" VerticalAlignment="Center" Margin="0,2,4,2" />
                             <WrapPanel x:Name="QuickChordPanel" VerticalAlignment="Center" />
 
@@ -783,8 +794,36 @@
                                     </StackPanel>
                                 </Border>
 
-                                <!-- Main Custom-Drawn Score Canvas -->
-                                <local:ScoreSurface x:Name="ScoreSurface" />
+                                <!-- Main Custom-Drawn Score Canvas + On-Paper Inline Lyric Overlay -->
+                                <Grid>
+                                    <local:ScoreSurface x:Name="ScoreSurface" />
+                                    <Canvas x:Name="InlineLyricOverlayCanvas" Visibility="Collapsed" Panel.ZIndex="5">
+                                        <StackPanel x:Name="InlineLyricEditorContainer">
+                                            <Border x:Name="InlineLyricCard" Background="#FFFFFF" BorderBrush="#2F6B48" BorderThickness="1.5"
+                                                    CornerRadius="6" Padding="5,2">
+                                                <Border.Effect>
+                                                    <DropShadowEffect BlurRadius="14" ShadowDepth="2" Opacity="0.14" Color="#0F172A" />
+                                                </Border.Effect>
+                                                <TextBox x:Name="InlineLyricBox"
+                                                         FontFamily="Microsoft YaHei" FontSize="19" Foreground="#1E293B"
+                                                         BorderThickness="0" Background="Transparent" Padding="1,0"
+                                                         TextWrapping="Wrap" AcceptsReturn="False"
+                                                         PreviewKeyDown="InlineLyricBox_PreviewKeyDown"
+                                                         LostKeyboardFocus="InlineLyricBox_LostKeyboardFocus" />
+                                            </Border>
+                                            <Border Background="#F5FFFFFF" BorderBrush="#DCE5DF" BorderThickness="1" CornerRadius="5"
+                                                    Padding="7,2" Margin="0,3,0,0" HorizontalAlignment="Left">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock x:Name="InlineLyricBadgeText" Text="原位改词" FontSize="10.5" FontWeight="SemiBold" Foreground="#2F6B48" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                    <TextBlock x:Name="InlineLyricHintText" Text="Enter 保存 · Shift+Enter 断句 · ↑↓ 切句 · Esc 取消" FontSize="10.5" Foreground="#64748B" VerticalAlignment="Center" />
+                                                    <Button x:Name="InlineAddAltButton" Content="+ 叠行" Padding="6,1" FontSize="10.5" Margin="8,0,0,0"
+                                                            Style="{StaticResource AccentOutlineButton}" Focusable="False"
+                                                            Click="InlineAddAlt_Click" ToolTip="在此句下方添加并原位编辑下一遍叠行歌词" />
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
+                                    </Canvas>
+                                </Grid>
                             </StackPanel>
                         </Border>
                     </ScrollViewer>

@@ -20,6 +20,7 @@ public partial class MainWindow
     private void PrintPdf_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedSong is null) return;
+        CommitFields();
 
         ChordPopover.IsOpen = false;
         StopAutoScroll(clearSession: false);
@@ -157,6 +158,7 @@ public partial class MainWindow
 
     private void ApplyPracticeMode(bool isPractice)
     {
+        CommitInlineLyricEdit(refocusSurface: false);
         ChordPopover.IsOpen = false;
 
         if (isPractice)
@@ -166,6 +168,8 @@ public partial class MainWindow
                 LibraryToggle.IsChecked = false;
             if (ContinuousPaintToggle is not null && ContinuousPaintToggle.IsChecked == true)
                 ContinuousPaintToggle.IsChecked = false;
+            if (LyricEditModeToggle is not null && LyricEditModeToggle.IsChecked == true)
+                LyricEditModeToggle.IsChecked = false;
         }
         else
         {

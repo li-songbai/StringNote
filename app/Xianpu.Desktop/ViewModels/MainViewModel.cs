@@ -195,6 +195,7 @@ public sealed partial class MainViewModel : ObservableObject
         SelectedSong.UpdatedAt = DateTime.Now;
         FavoriteVisualRefreshRequested?.Invoke();
         ComputeFilteredSongs();
+        FilterStateChanged?.Invoke();
         SaveRequested?.Invoke();
         Practice.StatusMessage = SelectedSong.Favorite
             ? $"已收藏《{SelectedSong.Title}》。"
@@ -221,6 +222,7 @@ public sealed partial class MainViewModel : ObservableObject
         RefreshCategoryOptions();
         CategoryOptionsRefreshRequested?.Invoke();
         ComputeFilteredSongs();
+        FilterStateChanged?.Invoke();
         SaveRequested?.Invoke();
         Practice.StatusMessage = $"已添加分类“{trimmed}”。";
     }
@@ -237,6 +239,7 @@ public sealed partial class MainViewModel : ObservableObject
         SelectedSong.UpdatedAt = DateTime.Now;
         UpdateCaptionTitle();
         ComputeFilteredSongs();
+        FilterStateChanged?.Invoke();
         SaveRequested?.Invoke();
         Practice.StatusMessage = $"已重命名为《{trimmed}》。";
     }
@@ -270,6 +273,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         SelectSongRequested?.Invoke(nextSong);
         ComputeFilteredSongs();
+        FilterStateChanged?.Invoke();
         SaveRequested?.Invoke();
         Practice.StatusMessage = $"已删除《{target.Title}》。";
     }

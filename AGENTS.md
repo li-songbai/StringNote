@@ -22,8 +22,9 @@ StringNote/
 │   ├── Services/                # 纯逻辑应用服务：SongUndoManager（撤销/重做）、IDialogService / WpfDialogService（弹窗抽象）
 │   ├── Models.cs                # 数据模型：LibraryData、SongModel、LyricLine、ChordPlacement、TabSection/TabBar/TabNote 等
 │   ├── LibraryStore.cs          # 本地曲库持久化（%LocalAppData%\Xianpu\library.json，支持 XIANPU_DATA_DIR 覆盖）与 .xianpu.json 导入导出
-│   ├── MainWindow.xaml(.cs)     # 主窗口生命周期、选歌协调与视口缩放（按职责拆分为 MainWindow.ChordPopover.cs / MainWindow.EditingAndIO.cs / MainWindow.Library.cs / MainWindow.UndoAndSettings.cs / MainWindow.Practice.cs / MainWindow.UpdatesAndChrome.cs）
-│   ├── ScoreSurface.cs          # 核心自绘谱面画布（流式合行/单行/双栏、和弦拖拽、键盘走位、叠行歌词、六线谱嵌入与 PNG 导出；拆分 ScoreSurface.Printing.cs 处理 A4 分页打印）
+│   ├── MainWindow.xaml(.cs)     # 主窗口生命周期、选歌协调与视口缩放（按职责拆分为 MainWindow.ChordPopover.cs / MainWindow.InlineLyric.cs / MainWindow.EditingAndIO.cs / MainWindow.Library.cs / MainWindow.UndoAndSettings.cs / MainWindow.Practice.cs / MainWindow.UpdatesAndChrome.cs）
+│   ├── ScoreSurface.cs          # 核心自绘谱面画布（流式合行/单行/双栏、原位歌词坐标映射、和弦拖拽、键盘走位、叠行歌词、六线谱嵌入与 PNG 导出；拆分 ScoreSurface.Printing.cs 处理 A4 分页打印）
+│   ├── LyricLineEditHelper.cs   # 谱面原位改词与断句时的和弦字位跟随平移、叠行同步切分算法
 │   ├── ChordCatalog.cs          # 各调常用和弦、开放/横按指法库与按调自定义和弦持久化
 │   ├── ChordDiagramView.cs      # 六弦和弦指法图渲染组件
 │   ├── ChordTranspose.cs        # 全谱半音升降调与按调名批量移调逻辑
