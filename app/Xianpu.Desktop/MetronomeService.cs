@@ -13,10 +13,14 @@ internal sealed class MetronomeService : IDisposable
     private const uint SndMemory = 0x0004;
 
     [DllImport("winmm.dll", SetLastError = false)]
-    private static extern bool PlaySound(byte[]? pszSound, IntPtr hmod, uint fdwSound);
+    private static extern bool PlaySound(IntPtr pszSound, IntPtr hmod, uint fdwSound);
 
     private readonly byte[] _accentClickWav;
     private readonly byte[] _normalClickWav;
+    private GCHandle _accentHandle;
+    private GCHandle _normalHandle;
+    private IntPtr _accentPtr;
+    private IntPtr _normalPtr;
     private readonly DispatcherTimer _timer;
     private readonly Stopwatch _clock = new();
 
@@ -65,6 +69,10 @@ internal sealed class MetronomeService : IDisposable
     {
         _accentClickWav = BuildWoodblockWav(frequencyHz: 1120.0, durationMs: 28, amplitude: 0.72);
         _normalClickWav = BuildWoodblockWav(frequencyHz: 780.0, durationMs: 24, amplitude: 0.52);
+        _accentHandle = GCHandle.Alloc(_accentClickWav, GCHandleType.Pinned);
+        _normalHandle = GCHandle.Alloc(_normalClickWav, GCHandleType.Pinned);
+        _accentPtr = _accentHandle.AddrOfPinnedObject();
+        _normalPtr = _normalHandle.AddrOfPinnedObject();
 
         _timer = new DispatcherTimer(DispatcherPriority.Send)
         {
@@ -96,7 +104,7 @@ internal sealed class MetronomeService : IDisposable
         _currentBeat = 0;
         try
         {
-            PlaySound(null, IntPtr.Zero, SndSync);
+            PlaySound(IntPtr.Zero, IntPtr.Zero, SndSync);
         }
         catch
         {
@@ -122,15 +130,19 @@ internal sealed class MetronomeService : IDisposable
 
     private void TriggerBeat()
     {
+        if (_disposed) return;
         _currentBeat = (_currentBeat % _beatsPerBar) + 1;
-        var wav = _currentBeat == 1 ? _accentClickWav : _normalClickWav;
-        try
+        var wavPtr = _currentBeat == 1 ? _accentPtr : _normalPtr;
+        if (wavPtr != IntPtr.Zero)
         {
-            PlaySound(wav, IntPtr.Zero, SndMemory | SndAsync | SndNoDefault);
-        }
-        catch
-        {
-            // Ignore audio device errors so practice mode never crashes
+            try
+            {
+                PlaySound(wavPtr, IntPtr.Zero, SndMemory | SndAsync | SndNoDefault);
+            }
+            catch
+            {
+                // Ignore audio device errors so practice mode never crashes
+            }
         }
         BeatTick?.Invoke(_currentBeat, _beatsPerBar);
     }
@@ -181,5 +193,9 @@ internal sealed class MetronomeService : IDisposable
         _disposed = true;
         Stop();
         _timer.Tick -= OnTimerTick;
+        _accentPtr = IntPtr.Zero;
+        _normalPtr = IntPtr.Zero;
+        if (_accentHandle.IsAllocated) _accentHandle.Free();
+        if (_normalHandle.IsAllocated) _normalHandle.Free();
     }
 }

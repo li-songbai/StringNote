@@ -40,6 +40,7 @@ public partial class MainWindow : Window
     private bool _restoringUndo;
     private readonly MetronomeService _metronome = new();
     private readonly DispatcherTimer _autoScrollTimer;
+    private readonly DispatcherTimer _headerSaveDebounceTimer;
     private readonly Stopwatch _autoScrollClock = new();
     private bool _autoScrollEngaged;
     private int _metronomeMeterIndex;
@@ -72,6 +73,16 @@ public partial class MainWindow : Window
             Interval = TimeSpan.FromMilliseconds(30)
         };
         _autoScrollTimer.Tick += OnAutoScrollTick;
+        _headerSaveDebounceTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(550)
+        };
+        _headerSaveDebounceTimer.Tick += (_, _) =>
+        {
+            _headerSaveDebounceTimer.Stop();
+            SaveLibraryQuietly();
+            RefreshLibraryList();
+        };
         _metronome.BeatTick += OnMetronomeBeatTick;
 
         SourceInitialized += (_, _) =>
@@ -220,6 +231,8 @@ public partial class MainWindow : Window
 
     private void SelectSong(SongModel song)
     {
+        FlushPendingHeaderSave();
+
         if (_selectedSong is not null)
             _selectedSong.PropertyChanged -= SelectedSong_PropertyChanged;
 
@@ -260,6 +273,15 @@ public partial class MainWindow : Window
         UpdateViewportScale();
     }
 
+    private void FlushPendingHeaderSave()
+    {
+        if (_headerSaveDebounceTimer.IsEnabled)
+        {
+            _headerSaveDebounceTimer.Stop();
+            SaveLibraryQuietly();
+        }
+    }
+
     private void UpdateCaptionTitle()
     {
         if (CaptionSongTitle is null) return;
@@ -293,13 +315,21 @@ public partial class MainWindow : Window
             RefreshQuickChordBar();
         }
         _selectedSong.UpdatedAt = DateTime.Now;
-        SaveLibraryQuietly();
 
         if (e.PropertyName is nameof(SongModel.Title)
             or nameof(SongModel.OriginalKey)
             or nameof(SongModel.SelectedKey)
             or nameof(SongModel.Capo)
-            or nameof(SongModel.Category)
+            or nameof(SongModel.Bpm))
+        {
+            _headerSaveDebounceTimer.Stop();
+            _headerSaveDebounceTimer.Start();
+            return;
+        }
+
+        SaveLibraryQuietly();
+
+        if (e.PropertyName is nameof(SongModel.Category)
             or nameof(SongModel.Favorite))
         {
             RefreshLibraryList();
@@ -1745,11 +1775,20 @@ public partial class MainWindow : Window
     private void CommitFields()
     {
         if (_selectedSong is null) return;
+        _headerSaveDebounceTimer.Stop();
         _selectedSong.Title = TitleBox.Text.Trim();
         _selectedSong.OriginalKey = OriginalKeyBox.Text.Trim();
         _selectedSong.SelectedKey = SelectedKeyBox.Text.Trim();
         var capo = CapoBox.Text.Trim();
         _selectedSong.Capo = capo == "不夹" ? "" : capo;
+        if (BpmBox is not null)
+        {
+            var bpmText = BpmBox.Text.Trim();
+            if (string.IsNullOrEmpty(bpmText))
+                _selectedSong.Bpm = 0;
+            else if (int.TryParse(bpmText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedBpm))
+                _selectedSong.Bpm = Math.Clamp(parsedBpm, 30, 240);
+        }
         _selectedSong.UpdatedAt = DateTime.Now;
         SaveLibraryQuietly();
         RefreshLibraryList();
@@ -2073,6 +2112,7 @@ public partial class MainWindow : Window
             OriginalKey = _selectedSong.OriginalKey,
             SelectedKey = _selectedSong.SelectedKey,
             Capo = _selectedSong.Capo,
+            Bpm = _selectedSong.Bpm,
             Category = _selectedSong.Category,
             Favorite = _selectedSong.Favorite,
             ChordDisplayMode = _selectedSong.ChordDisplayMode,
@@ -2514,6 +2554,7 @@ public partial class MainWindow : Window
             BpmBox.Text = _selectedSong.Bpm > 0 ? _selectedSong.Bpm.ToString(CultureInfo.InvariantCulture) : "";
             _initializing = false;
         }
+        _headerSaveDebounceTimer.Stop();
         SaveLibraryQuietly();
     }
 
@@ -2562,9 +2603,9 @@ public partial class MainWindow : Window
             _autoScrollClock.Restart();
             _autoScrollTimer.Start();
             AutoScrollToggle.Content = "⏸ 暂停";
-            AutoScrollToggle.Background = new SolidColorBrush(Color.FromRgb(234, 243, 237));
-            AutoScrollToggle.BorderBrush = new SolidColorBrush(Color.FromRgb(47, 107, 72));
-            AutoScrollToggle.Foreground = new SolidColorBrush(Color.FromRgb(36, 85, 56));
+            AutoScrollToggle.Background = AppDialogs.AccentLightBrush;
+            AutoScrollToggle.BorderBrush = AppDialogs.AccentBrush;
+            AutoScrollToggle.Foreground = AppDialogs.AccentHoverBrush;
             SetStatus("已开启自动滚屏（按 Space 空格键可随时暂停/继续）。");
         }
         else
@@ -2573,8 +2614,8 @@ public partial class MainWindow : Window
             _autoScrollClock.Stop();
             AutoScrollToggle.Content = "▶ 滚屏";
             AutoScrollToggle.Background = Brushes.White;
-            AutoScrollToggle.BorderBrush = new SolidColorBrush(Color.FromRgb(203, 213, 225));
-            AutoScrollToggle.Foreground = new SolidColorBrush(Color.FromRgb(51, 65, 85));
+            AutoScrollToggle.BorderBrush = AppDialogs.InputBorderBrush;
+            AutoScrollToggle.Foreground = AppDialogs.BodyBrush;
             if (_autoScrollEngaged)
                 SetStatus("自动滚屏已暂停（按 Space 空格键可继续）。");
         }
@@ -2632,9 +2673,9 @@ public partial class MainWindow : Window
             var (label, beats) = MetronomeMeters[_metronomeMeterIndex];
             _metronome.Start(bpm, beats);
             MetronomeToggle.Content = $"■ {bpm}";
-            MetronomeToggle.Background = new SolidColorBrush(Color.FromRgb(234, 243, 237));
-            MetronomeToggle.BorderBrush = new SolidColorBrush(Color.FromRgb(47, 107, 72));
-            MetronomeToggle.Foreground = new SolidColorBrush(Color.FromRgb(36, 85, 56));
+            MetronomeToggle.Background = AppDialogs.AccentLightBrush;
+            MetronomeToggle.BorderBrush = AppDialogs.AccentBrush;
+            MetronomeToggle.Foreground = AppDialogs.AccentHoverBrush;
             SetStatus($"节拍器已开启：{bpm} BPM（{label} 拍）。");
         }
         else
@@ -2642,8 +2683,8 @@ public partial class MainWindow : Window
             _metronome.Stop();
             MetronomeToggle.Content = "♩ 节拍器";
             MetronomeToggle.Background = Brushes.White;
-            MetronomeToggle.BorderBrush = new SolidColorBrush(Color.FromRgb(203, 213, 225));
-            MetronomeToggle.Foreground = new SolidColorBrush(Color.FromRgb(51, 65, 85));
+            MetronomeToggle.BorderBrush = AppDialogs.InputBorderBrush;
+            MetronomeToggle.Foreground = AppDialogs.BodyBrush;
             if (MetronomeBeatText is not null)
                 MetronomeBeatText.Text = "";
             SetStatus("节拍器已停止。");
@@ -2664,9 +2705,7 @@ public partial class MainWindow : Window
     {
         if (MetronomeBeatText is null) return;
         MetronomeBeatText.Text = $"● {beat}/{beatsPerBar}";
-        MetronomeBeatText.Foreground = beat == 1
-            ? new SolidColorBrush(Color.FromRgb(47, 107, 72))
-            : new SolidColorBrush(Color.FromRgb(100, 116, 139));
+        MetronomeBeatText.Foreground = beat == 1 ? AppDialogs.AccentBrush : AppDialogs.MutedBrush;
         if (MetronomeToggle is { IsChecked: true })
             MetronomeToggle.Content = $"■ {_metronome.Bpm}";
     }
@@ -3062,6 +3101,7 @@ public partial class MainWindow : Window
 
     private void ExitApplication()
     {
+        FlushPendingHeaderSave();
         StopAutoScroll(clearSession: true);
         _metronome.Dispose();
         _trayService?.Dispose();
@@ -3071,6 +3111,7 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
+        FlushPendingHeaderSave();
         StopAutoScroll(clearSession: true);
         _metronome.Dispose();
         _trayService?.Dispose();
