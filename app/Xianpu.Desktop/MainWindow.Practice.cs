@@ -7,47 +7,10 @@ namespace Xianpu.Desktop;
 
 public partial class MainWindow
 {
-    private void BpmBox_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        if (_initializing || _selectedSong is null || BpmBox is null) return;
-        var text = BpmBox.Text.Trim();
-        if (string.IsNullOrEmpty(text))
-        {
-            _selectedSong.Bpm = 0;
-            return;
-        }
-        if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) && parsed is >= 30 and <= 240)
-        {
-            _selectedSong.Bpm = parsed;
-            if (_metronome.IsRunning)
-                _metronome.Bpm = parsed;
-        }
-    }
-
     private void BpmBox_LostFocus(object sender, RoutedEventArgs e)
     {
-        if (_initializing || _selectedSong is null || BpmBox is null) return;
-        var text = BpmBox.Text.Trim();
-        if (string.IsNullOrEmpty(text))
-        {
-            _selectedSong.Bpm = 0;
-        }
-        else if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
-        {
-            var clamped = Math.Clamp(parsed, 30, 240);
-            _selectedSong.Bpm = clamped;
-            _initializing = true;
-            BpmBox.Text = clamped.ToString(CultureInfo.InvariantCulture);
-            _initializing = false;
-            if (_metronome.IsRunning)
-                _metronome.Bpm = clamped;
-        }
-        else
-        {
-            _initializing = true;
-            BpmBox.Text = _selectedSong.Bpm > 0 ? _selectedSong.Bpm.ToString(CultureInfo.InvariantCulture) : "";
-            _initializing = false;
-        }
+        if (_initializing || _selectedSong is null) return;
+        _vm.CommitBpmText();
         _headerSaveDebounceTimer.Stop();
         SaveLibraryQuietly();
     }
@@ -96,7 +59,7 @@ public partial class MainWindow
             _autoScrollEngaged = true;
             _autoScrollClock.Restart();
             _autoScrollTimer.Start();
-            AutoScrollToggle.Content = "⏸ 暂停";
+            _vm.Practice.SetAutoScrollState(true);
             AutoScrollToggle.Background = AppDialogs.AccentLightBrush;
             AutoScrollToggle.BorderBrush = AppDialogs.AccentBrush;
             AutoScrollToggle.Foreground = AppDialogs.AccentHoverBrush;
@@ -106,7 +69,7 @@ public partial class MainWindow
         {
             _autoScrollTimer.Stop();
             _autoScrollClock.Stop();
-            AutoScrollToggle.Content = "▶ 滚屏";
+            _vm.Practice.SetAutoScrollState(false);
             AutoScrollToggle.Background = Brushes.White;
             AutoScrollToggle.BorderBrush = AppDialogs.InputBorderBrush;
             AutoScrollToggle.Foreground = AppDialogs.BodyBrush;
@@ -164,9 +127,10 @@ public partial class MainWindow
         if (active)
         {
             var bpm = _selectedSong is { Bpm: >= 30 and <= 240 } ? _selectedSong.Bpm : 80;
-            var (label, beats) = MetronomeMeters[_metronomeMeterIndex];
+            var beats = _vm.Practice.CurrentBeatsPerBar;
+            var label = _vm.Practice.MetronomeMeterLabel;
             _metronome.Start(bpm, beats);
-            MetronomeToggle.Content = $"■ {bpm}";
+            _vm.Practice.SetMetronomeRunning(bpm);
             MetronomeToggle.Background = AppDialogs.AccentLightBrush;
             MetronomeToggle.BorderBrush = AppDialogs.AccentBrush;
             MetronomeToggle.Foreground = AppDialogs.AccentHoverBrush;
@@ -175,32 +139,25 @@ public partial class MainWindow
         else
         {
             _metronome.Stop();
-            MetronomeToggle.Content = "♩ 节拍器";
+            _vm.Practice.SetMetronomeStopped();
             MetronomeToggle.Background = Brushes.White;
             MetronomeToggle.BorderBrush = AppDialogs.InputBorderBrush;
             MetronomeToggle.Foreground = AppDialogs.BodyBrush;
-            if (MetronomeBeatText is not null)
-                MetronomeBeatText.Text = "";
             SetStatus("节拍器已停止。");
         }
     }
 
     private void MetronomeMeter_Click(object sender, RoutedEventArgs e)
     {
-        _metronomeMeterIndex = (_metronomeMeterIndex + 1) % MetronomeMeters.Length;
-        var (label, beats) = MetronomeMeters[_metronomeMeterIndex];
-        if (MetronomeMeterButton is not null)
-            MetronomeMeterButton.Content = label;
+        var (label, beats) = _vm.Practice.CycleMeter();
         _metronome.BeatsPerBar = beats;
         SetStatus($"节拍器拍号已切换为 {label}。");
     }
 
     private void OnMetronomeBeatTick(int beat, int beatsPerBar)
     {
-        if (MetronomeBeatText is null) return;
-        MetronomeBeatText.Text = $"● {beat}/{beatsPerBar}";
-        MetronomeBeatText.Foreground = beat == 1 ? AppDialogs.AccentBrush : AppDialogs.MutedBrush;
-        if (MetronomeToggle is { IsChecked: true })
-            MetronomeToggle.Content = $"■ {_metronome.Bpm}";
+        _vm.Practice.UpdateBeat(beat, beatsPerBar, _metronome.Bpm);
+        if (MetronomeBeatText is not null)
+            MetronomeBeatText.Foreground = beat == 1 ? AppDialogs.AccentBrush : AppDialogs.MutedBrush;
     }
 }

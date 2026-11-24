@@ -12,16 +12,18 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using Xianpu.Desktop.ViewModels;
 
 namespace Xianpu.Desktop;
 
 public partial class MainWindow : Window
 {
     private readonly LibraryStore _store = new();
-    private LibraryData _library = new();
-    private SongModel? _selectedSong;
+    private readonly MainViewModel _vm = new();
+    private LibraryData _library { get => _vm.Library; set => _vm.Library = value; }
+    private SongModel? _selectedSong { get => _vm.SelectedSong; set => _vm.SelectedSong = value; }
     private bool _initializing;
-    private bool _favoritesOnly;
+    private bool _favoritesOnly { get => _vm.FavoritesOnly; set => _vm.FavoritesOnly = value; }
     private ChordAnchor? _popoverAnchor;
     private string _popoverInitialChord = "";
     private bool _syncingPopoverPosition;
@@ -32,26 +34,15 @@ public partial class MainWindow : Window
     private Point _panOrigin;
     private double _panStartH;
     private double _panStartV;
-    private const string AllCategoriesLabel = "全部分类";
-    private const int MaxUndoSteps = 50;
-    private readonly List<string> _undoStack = [];
-    private readonly List<string> _redoStack = [];
-    private string? _currentSongSnapshot;
+    private const string AllCategoriesLabel = MainViewModel.AllCategoriesLabel;
     private bool _restoringUndo;
     private readonly MetronomeService _metronome = new();
     private readonly DispatcherTimer _autoScrollTimer;
     private readonly DispatcherTimer _headerSaveDebounceTimer;
     private readonly Stopwatch _autoScrollClock = new();
     private bool _autoScrollEngaged;
-    private int _metronomeMeterIndex;
     private string? _startupLoadErrorMessage;
     private string? _startupCorruptedBackupPath;
-    private static readonly (string Label, int Beats)[] MetronomeMeters =
-    [
-        ("4/4", 4),
-        ("3/4", 3),
-        ("6/8", 6)
-    ];
 
     private static readonly string[] KeyNames =
     [
@@ -67,6 +58,26 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        DataContext = _vm;
+        _vm.AttachDialogService(new Services.WpfDialogService(this));
+        _vm.UndoRequested += PerformUndo;
+        _vm.RedoRequested += PerformRedo;
+        _vm.FilterStateChanged += () =>
+        {
+            if (LibrarySearchPlaceholder is not null)
+                LibrarySearchPlaceholder.Visibility = _vm.IsSearchEmpty ? Visibility.Visible : Visibility.Collapsed;
+            UpdateLibraryFilterButtons();
+            SyncLibraryListSelection();
+        };
+        _vm.SaveRequested += SaveLibraryQuietly;
+        _vm.FavoriteVisualRefreshRequested += UpdateFavoriteToggleVisual;
+        _vm.CategoryOptionsRefreshRequested += RefreshCategoryOptions;
+        _vm.SelectSongRequested += SelectSong;
+        _vm.BpmChangedWhileEditing += bpm =>
+        {
+            if (_metronome.IsRunning)
+                _metronome.Bpm = bpm;
+        };
         ApplyAdaptiveInitialWindowSize();
         LoadWindowIcon();
 
@@ -265,12 +276,7 @@ public partial class MainWindow : Window
         StopAutoScroll(clearSession: true);
 
         _initializing = true;
-        TitleBox.Text = song.Title;
-        OriginalKeyBox.Text = song.OriginalKey;
-        SelectedKeyBox.Text = song.SelectedKey;
-        CapoBox.Text = song.Capo;
-        if (BpmBox is not null)
-            BpmBox.Text = song.Bpm > 0 ? song.Bpm.ToString(CultureInfo.InvariantCulture) : "";
+        _vm.SyncBpmTextFromSelectedSong();
         ColumnModeBox.SelectedValue = song.ColumnMode.ToString(CultureInfo.InvariantCulture);
         ChordDisplayBox.SelectedValue = string.IsNullOrWhiteSpace(song.ChordDisplayMode) ? "name" : song.ChordDisplayMode;
         if (SongCategoryBox is not null)
@@ -306,9 +312,7 @@ public partial class MainWindow : Window
 
     private void UpdateCaptionTitle()
     {
-        if (CaptionSongTitle is null) return;
-        var title = string.IsNullOrWhiteSpace(_selectedSong?.Title) ? "吉他歌词和弦记谱" : _selectedSong!.Title.Trim();
-        CaptionSongTitle.Text = $"· {title}";
+        _vm.UpdateCaptionTitle();
     }
 
     private void SelectedSong_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -369,8 +373,7 @@ public partial class MainWindow : Window
         var scale = _manualZoom ?? fitScale;
         ScoreSurface.LayoutTransform = Math.Abs(scale - 1.0) < 0.01 ? Transform.Identity : new ScaleTransform(scale, scale);
 
-        if (ZoomPercentText is not null)
-            ZoomPercentText.Text = _manualZoom is null ? $"适应 {scale * 100:0}%" : $"{scale * 100:0}%";
+        _vm.Practice.ZoomPercentText = _manualZoom is null ? $"适应 {scale * 100:0}%" : $"{scale * 100:0}%";
     }
 
     private void ZoomIn_Click(object sender, RoutedEventArgs e) => AdjustZoom(0.1);
@@ -473,8 +476,7 @@ public partial class MainWindow : Window
 
     private void SetStatus(string message)
     {
-        if (StatusText is not null)
-            StatusText.Text = message;
+        _vm.Practice.StatusMessage = message;
     }
 
     private string? PromptSingleLine(string title, string label, string initial = "") =>

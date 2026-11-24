@@ -190,7 +190,7 @@
                             <TextBlock Text="笺" Foreground="White" FontSize="11.5" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <TextBlock Text="弦笺 · StringNote" FontSize="12.5" FontWeight="SemiBold" Foreground="#1E293B" VerticalAlignment="Center" />
-                        <TextBlock x:Name="CaptionSongTitle" Text="· 吉他歌词和弦记谱" FontSize="11.5" Foreground="#64748B" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="CaptionSongTitle" Text="{Binding CaptionSongTitle}" FontSize="11.5" Foreground="#64748B" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                 </DockPanel>
             </Border>
@@ -200,7 +200,7 @@
                 <WrapPanel VerticalAlignment="Center">
                     <!-- Library Toggle + 4 Song Metadata Fields -->
                     <WrapPanel VerticalAlignment="Center" Margin="0,0,12,0">
-                        <ToggleButton x:Name="LibraryToggle" Content="曲库 (0)" IsChecked="True"
+                        <ToggleButton x:Name="LibraryToggle" Content="{Binding LibraryToggleText}" IsChecked="True"
                                       Margin="0,2,10,2" Padding="9,4" FontSize="12" FontWeight="SemiBold"
                                       Background="#EAF3ED" Foreground="#245538" BorderBrush="#94BFA4" BorderThickness="1" Cursor="Hand"
                                       Checked="LibraryToggle_Changed" Unchecked="LibraryToggle_Changed"
@@ -209,15 +209,16 @@
                         <!-- 1. 歌曲名称 -->
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2,10,2">
                             <TextBlock Text="歌曲" FontSize="12" Foreground="#64748B" VerticalAlignment="Center" Margin="0,0,5,0" />
-                            <TextBox x:Name="TitleBox" Width="154" MinWidth="110" TextChanged="SongField_TextChanged" ToolTip="输入歌曲名称" />
+                            <TextBox x:Name="TitleBox" Width="154" MinWidth="110"
+                                     Text="{Binding SelectedSong.Title, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="输入歌曲名称" />
                         </StackPanel>
 
                         <!-- 2. 原调 -->
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2,10,2">
                             <TextBlock Text="原调" FontSize="12" Foreground="#64748B" VerticalAlignment="Center" Margin="0,0,4,0" />
                             <ComboBox x:Name="OriginalKeyBox" Width="68" IsEditable="True"
-                                      SelectionChanged="OriginalKeyBox_SelectionChanged"
-                                      TextBoxBase.TextChanged="OriginalKeyBox_TextChanged"
+                                      Text="{Binding SelectedSong.OriginalKey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                       LostFocus="KeyBox_LostFocus" />
                         </StackPanel>
 
@@ -225,8 +226,7 @@
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2,10,2">
                             <TextBlock Text="选调" FontSize="12" Foreground="#64748B" VerticalAlignment="Center" Margin="0,0,4,0" />
                             <ComboBox x:Name="SelectedKeyBox" Width="68" IsEditable="True"
-                                      SelectionChanged="SelectedKeyBox_SelectionChanged"
-                                      TextBoxBase.TextChanged="SelectedKeyBox_TextChanged"
+                                      Text="{Binding SelectedSong.SelectedKey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                       LostFocus="KeyBox_LostFocus" />
                             <Button Content="♭-1" Padding="6,4" Margin="4,0,2,0" FontSize="11.5" Click="TransposeDown_Click" ToolTip="全谱歌词和弦降半音（不影响前奏/间奏六线谱）" />
                             <Button Content="♯+1" Padding="6,4" Margin="0,0,2,0" FontSize="11.5" Click="TransposeUp_Click" ToolTip="全谱歌词和弦升半音（不影响前奏/间奏六线谱）" />
@@ -237,8 +237,7 @@
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2,8,2">
                             <TextBlock Text="变调夹" FontSize="12" Foreground="#64748B" VerticalAlignment="Center" Margin="0,0,4,0" />
                             <ComboBox x:Name="CapoBox" Width="78" IsEditable="True"
-                                      SelectionChanged="CapoBox_SelectionChanged"
-                                      TextBoxBase.TextChanged="CapoBox_TextChanged"
+                                      Text="{Binding SelectedSong.Capo, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                       LostFocus="KeyBox_LostFocus"
                                       ToolTip="例如：不夹、2 品、4 品" />
                         </StackPanel>
@@ -246,7 +245,9 @@
                         <!-- 5. BPM (可选) -->
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2,4,2">
                             <TextBlock Text="BPM" FontSize="12" Foreground="#64748B" VerticalAlignment="Center" Margin="0,0,4,0" />
-                            <TextBox x:Name="BpmBox" Width="52" TextChanged="BpmBox_TextChanged" LostFocus="BpmBox_LostFocus"
+                            <TextBox x:Name="BpmBox" Width="52"
+                                     Text="{Binding BpmText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     LostFocus="BpmBox_LostFocus"
                                      ToolTip="可选拍速（30~240），留空则不在谱头显示；可配合底部节拍器使用" />
                         </StackPanel>
                     </WrapPanel>
@@ -285,8 +286,8 @@
 
                     <!-- Right: Chord & Layout Controls + Optional TAB Component -->
                     <WrapPanel VerticalAlignment="Center">
-                        <Button x:Name="UndoButton" Content="↩ 撤销" Padding="7,4" FontSize="12" Click="Undo_Click" IsEnabled="False" Margin="0,2,4,2" ToolTip="撤销上一步谱面编辑 (Ctrl+Z)" />
-                        <Button x:Name="RedoButton" Content="↪ 重做" Padding="7,4" FontSize="12" Click="Redo_Click" IsEnabled="False" Margin="0,2,8,2" ToolTip="重做已撤销的编辑 (Ctrl+Y)" />
+                        <Button x:Name="UndoButton" Content="↩ 撤销" Padding="7,4" FontSize="12" Command="{Binding UndoCommand}" ToolTip="{Binding UndoToolTip}" Margin="0,2,4,2" />
+                        <Button x:Name="RedoButton" Content="↪ 重做" Padding="7,4" FontSize="12" Command="{Binding RedoCommand}" ToolTip="{Binding RedoToolTip}" Margin="0,2,8,2" />
                         <Border Width="1" Height="18" Background="#CBD5E1" Margin="0,2,8,2" />
                         <Button x:Name="CopyLineChordsButton" Content="复制句和弦" Padding="7,4" FontSize="12" Click="CopyLineChords_Click" IsEnabled="False" Margin="0,2,5,2" ToolTip="复制当前选中句的全部和弦走向（Ctrl+C；Ctrl+D 直接复制到下一句）" />
                         <Button x:Name="PasteLineChordsButton" Content="粘贴句和弦" Padding="7,4" FontSize="12" Click="PasteLineChords_Click" IsEnabled="False" Margin="0,2,5,2" ToolTip="将已复制的和弦走向粘贴到当前选中句（Ctrl+V）" />
@@ -345,7 +346,7 @@
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <TextBlock Text="本地曲库" FontSize="13.5" FontWeight="Bold" Foreground="#1E293B" VerticalAlignment="Center" />
                                 <Border Background="#EAF3ED" CornerRadius="10" Padding="7,1" Margin="6,0,0,0" VerticalAlignment="Center">
-                                    <TextBlock x:Name="LibraryCountText" Text="0" FontSize="11" FontWeight="SemiBold" Foreground="#245538" />
+                                    <TextBlock x:Name="LibraryCountText" Text="{Binding FilteredCountDisplay}" FontSize="11" FontWeight="SemiBold" Foreground="#245538" />
                                 </Border>
                             </StackPanel>
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
@@ -358,7 +359,7 @@
                         <!-- Search Box -->
                         <Grid Grid.Row="1" Margin="0,0,0,7">
                             <TextBox x:Name="LibrarySearchBox" Padding="8,4" FontSize="12"
-                                     TextChanged="LibraryFilter_Changed"
+                                     Text="{Binding SearchQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      ToolTip="搜索歌名、调号、分类或歌词..." />
                             <TextBlock x:Name="LibrarySearchPlaceholder" Text="搜索歌名、调号、分类或歌词..."
                                        FontSize="11.5" Foreground="#94A3B8" Margin="10,0,8,0"
@@ -373,10 +374,10 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Button x:Name="LibraryAllFilterButton" Grid.Column="0" Content="全部" Padding="7,3" FontSize="11" Margin="0,0,4,0" Click="LibraryAllFilter_Click" />
-                            <Button x:Name="LibraryFavFilterButton" Grid.Column="1" Content="★ 收藏" Padding="7,3" FontSize="11" Margin="0,0,4,0" Click="LibraryFavFilter_Click" />
+                            <Button x:Name="LibraryAllFilterButton" Grid.Column="0" Content="全部" Padding="7,3" FontSize="11" Margin="0,0,4,0" Command="{Binding ShowAllSongsCommand}" />
+                            <Button x:Name="LibraryFavFilterButton" Grid.Column="1" Content="★ 收藏" Padding="7,3" FontSize="11" Margin="0,0,4,0" Command="{Binding ShowFavoriteSongsCommand}" />
                             <ComboBox x:Name="LibraryCategoryFilter" Grid.Column="2" FontSize="11" Padding="5,2" SelectionChanged="LibraryFilter_Changed" ToolTip="按分类筛选曲库" />
-                            <Button Grid.Column="3" Content="+ 分类" Padding="6,3" FontSize="11" Margin="4,0,0,0" Click="AddCategory_Click" ToolTip="添加新曲库分类" />
+                            <Button Grid.Column="3" Content="+ 分类" Padding="6,3" FontSize="11" Margin="4,0,0,0" Command="{Binding AddCategoryCommand}" ToolTip="添加新曲库分类" />
                         </Grid>
 
                         <!-- Active Song Quick Meta -->
@@ -400,6 +401,7 @@
 
                         <!-- Song List -->
                         <ListBox x:Name="LibrarySongList" Grid.Row="4"
+                                 ItemsSource="{Binding FilteredSongs}"
                                  BorderBrush="#E2E8F0" BorderThickness="1" Background="#FFFFFF"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                  SelectionChanged="LibrarySongList_SelectionChanged">
@@ -446,10 +448,10 @@
 
                         <!-- Bottom Action Bar -->
                         <UniformGrid Grid.Row="5" Columns="4" Margin="0,7,0,0">
-                            <Button x:Name="ListFavoriteButton" Content="★ 收藏" Padding="3,4" FontSize="11" Margin="0,0,3,0" Click="ToggleSelectedFavorite_Click" ToolTip="切换当前曲谱收藏状态" />
-                            <Button Content="重命名" Padding="3,4" FontSize="11" Margin="0,0,3,0" Click="RenameSong_Click" ToolTip="重命名当前曲谱" />
+                            <Button x:Name="ListFavoriteButton" Content="★ 收藏" Padding="3,4" FontSize="11" Margin="0,0,3,0" Command="{Binding ToggleFavoriteCommand}" ToolTip="切换当前曲谱收藏状态" />
+                            <Button Content="重命名" Padding="3,4" FontSize="11" Margin="0,0,3,0" Command="{Binding RenameSelectedSongCommand}" ToolTip="重命名当前曲谱" />
                             <Button Content="改词" Padding="3,4" FontSize="11" Margin="0,0,3,0" Click="EditAllLyrics_Click" ToolTip="批量编辑当前曲谱歌词" />
-                            <Button Content="删除" Padding="3,4" FontSize="11" Foreground="#B91C1C" BorderBrush="#FECACA" Background="#FEF2F2" Click="DeleteSong_Click" ToolTip="从本地曲库删除当前曲谱" />
+                            <Button Content="删除" Padding="3,4" FontSize="11" Foreground="#B91C1C" BorderBrush="#FECACA" Background="#FEF2F2" Command="{Binding DeleteSelectedSongCommand}" ToolTip="从本地曲库删除当前曲谱" />
                         </UniformGrid>
                     </Grid>
                 </Border>
@@ -537,7 +539,7 @@
                 <DockPanel LastChildFill="True">
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
                         <!-- Practice: Auto-Scroll (Teleprompter) -->
-                        <ToggleButton x:Name="AutoScrollToggle" Content="▶ 滚屏" Padding="7,1" FontSize="11" Margin="0,0,4,0"
+                        <ToggleButton x:Name="AutoScrollToggle" Content="{Binding Practice.AutoScrollButtonText}" Padding="7,1" FontSize="11" Margin="0,0,4,0"
                                       Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" Foreground="#334155" Cursor="Hand"
                                       Checked="AutoScrollToggle_Changed" Unchecked="AutoScrollToggle_Changed"
                                       ToolTip="开启/暂停自动滚屏看谱（滚屏激活时按 Space 空格键可随时暂停/继续）" />
@@ -554,13 +556,13 @@
                         <Border Width="1" Height="14" Background="#CBD5E1" Margin="0,0,8,0" />
 
                         <!-- Practice: Metronome -->
-                        <ToggleButton x:Name="MetronomeToggle" Content="♩ 节拍器" Padding="7,1" FontSize="11" Margin="0,0,4,0"
+                        <ToggleButton x:Name="MetronomeToggle" Content="{Binding Practice.MetronomeButtonText}" Padding="7,1" FontSize="11" Margin="0,0,4,0"
                                       Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" Foreground="#334155" Cursor="Hand"
                                       Checked="MetronomeToggle_Changed" Unchecked="MetronomeToggle_Changed"
                                       ToolTip="开启/关闭内置节拍器（自动使用谱头 BPM，未填时默认 80 BPM）" />
-                        <Button x:Name="MetronomeMeterButton" Content="4/4" Padding="6,1" FontSize="11" Margin="0,0,4,0"
+                        <Button x:Name="MetronomeMeterButton" Content="{Binding Practice.MetronomeMeterLabel}" Padding="6,1" FontSize="11" Margin="0,0,4,0"
                                 Click="MetronomeMeter_Click" ToolTip="点击切换节拍器拍号（4/4 / 3/4 / 6/8）" />
-                        <TextBlock x:Name="MetronomeBeatText" Text="" FontSize="11" FontWeight="Bold" Foreground="#2F6B48"
+                        <TextBlock x:Name="MetronomeBeatText" Text="{Binding Practice.MetronomeBeatText}" FontSize="11" FontWeight="Bold" Foreground="#2F6B48"
                                    VerticalAlignment="Center" MinWidth="28" Margin="0,0,8,0" />
 
                         <Border Width="1" Height="14" Background="#CBD5E1" Margin="0,0,8,0" />
@@ -568,12 +570,12 @@
                         <!-- Zoom -->
                         <TextBlock Text="谱面缩放" FontSize="11" Foreground="#64748B" VerticalAlignment="Center" Margin="0,0,6,0" />
                         <Button Content="-" Padding="7,1" FontSize="12" Margin="0,0,4,0" Click="ZoomOut_Click" ToolTip="缩小谱面 (Ctrl + 滚轮向下)" />
-                        <TextBlock x:Name="ZoomPercentText" Text="适应" FontSize="11" FontWeight="SemiBold" Foreground="#334155" VerticalAlignment="Center" MinWidth="56" TextAlignment="Center" />
+                        <TextBlock x:Name="ZoomPercentText" Text="{Binding Practice.ZoomPercentText}" FontSize="11" FontWeight="SemiBold" Foreground="#334155" VerticalAlignment="Center" MinWidth="56" TextAlignment="Center" />
                         <Button Content="+" Padding="7,1" FontSize="12" Margin="4,0,6,0" Click="ZoomIn_Click" ToolTip="放大谱面 (Ctrl + 滚轮向上)" />
                         <Button Content="适应窗口" Padding="7,1" FontSize="11" Click="ZoomFit_Click" ToolTip="自动缩放以完整适应当前窗口宽度" />
                     </StackPanel>
                     <TextBlock x:Name="StatusText"
-                               Text="提示：点击歌词「进唱字位」输入和弦；空白处拖拽可移动页面；顶部可拖动窗口，右下可调整大小。"
+                               Text="{Binding Practice.StatusMessage}"
                                FontSize="11" Foreground="#64748B" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                 </DockPanel>
             </Border>
