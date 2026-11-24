@@ -123,12 +123,7 @@ public partial class MainWindow
             foreach (var section in restored.TabSections)
                 _selectedSong.TabSections.Add(section);
 
-            TitleBox.Text = _selectedSong.Title;
-            OriginalKeyBox.Text = _selectedSong.OriginalKey;
-            SelectedKeyBox.Text = _selectedSong.SelectedKey;
-            CapoBox.Text = _selectedSong.Capo;
-            if (BpmBox is not null)
-                BpmBox.Text = _selectedSong.Bpm > 0 ? _selectedSong.Bpm.ToString(CultureInfo.InvariantCulture) : "";
+            _vm.SyncBpmTextFromSelectedSong();
             ColumnModeBox.SelectedValue = _selectedSong.ColumnMode.ToString(CultureInfo.InvariantCulture);
             ChordDisplayBox.SelectedValue = string.IsNullOrWhiteSpace(_selectedSong.ChordDisplayMode) ? "name" : _selectedSong.ChordDisplayMode;
             if (SongCategoryBox is not null)

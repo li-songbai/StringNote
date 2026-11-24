@@ -7,47 +7,10 @@ namespace Xianpu.Desktop;
 
 public partial class MainWindow
 {
-    private void BpmBox_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        if (_initializing || _selectedSong is null || BpmBox is null) return;
-        var text = BpmBox.Text.Trim();
-        if (string.IsNullOrEmpty(text))
-        {
-            _selectedSong.Bpm = 0;
-            return;
-        }
-        if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) && parsed is >= 30 and <= 240)
-        {
-            _selectedSong.Bpm = parsed;
-            if (_metronome.IsRunning)
-                _metronome.Bpm = parsed;
-        }
-    }
-
     private void BpmBox_LostFocus(object sender, RoutedEventArgs e)
     {
-        if (_initializing || _selectedSong is null || BpmBox is null) return;
-        var text = BpmBox.Text.Trim();
-        if (string.IsNullOrEmpty(text))
-        {
-            _selectedSong.Bpm = 0;
-        }
-        else if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
-        {
-            var clamped = Math.Clamp(parsed, 30, 240);
-            _selectedSong.Bpm = clamped;
-            _initializing = true;
-            BpmBox.Text = clamped.ToString(CultureInfo.InvariantCulture);
-            _initializing = false;
-            if (_metronome.IsRunning)
-                _metronome.Bpm = clamped;
-        }
-        else
-        {
-            _initializing = true;
-            BpmBox.Text = _selectedSong.Bpm > 0 ? _selectedSong.Bpm.ToString(CultureInfo.InvariantCulture) : "";
-            _initializing = false;
-        }
+        if (_initializing || _selectedSong is null) return;
+        _vm.CommitBpmText();
         _headerSaveDebounceTimer.Stop();
         SaveLibraryQuietly();
     }

@@ -84,26 +84,24 @@ public partial class MainWindow
 
     private void RefreshLibraryList()
     {
-        if (LibrarySongList is null || LibraryToggle is null || LibraryCountText is null) return;
+        if (LibrarySongList is null) return;
 
         var query = LibrarySearchBox?.Text?.Trim() ?? "";
         if (LibrarySearchPlaceholder is not null)
             LibrarySearchPlaceholder.Visibility = string.IsNullOrEmpty(query) ? Visibility.Visible : Visibility.Collapsed;
 
-        _vm.SearchQuery = query;
         _vm.SelectedCategoryFilter = LibraryCategoryFilter?.SelectedItem as string ?? AllCategoriesLabel;
-        var filtered = _vm.ComputeFilteredSongs();
+        _vm.ComputeFilteredSongs();
+        SyncLibraryListSelection();
+    }
 
+    private void SyncLibraryListSelection()
+    {
+        if (LibrarySongList is null) return;
         var prevInit = _initializing;
         _initializing = true;
-        LibrarySongList.ItemsSource = filtered;
-        LibrarySongList.SelectedItem = _selectedSong is not null && filtered.Contains(_selectedSong) ? _selectedSong : null;
+        LibrarySongList.SelectedItem = _selectedSong is not null && _vm.FilteredSongs.Contains(_selectedSong) ? _selectedSong : null;
         _initializing = prevInit;
-
-        LibraryToggle.Content = _vm.LibraryToggleText;
-        LibraryCountText.Text = filtered.Count == _library.Songs.Count
-            ? $"{_library.Songs.Count}"
-            : $"{filtered.Count}/{_library.Songs.Count}";
     }
 
     private void LibrarySongList_SelectionChanged(object sender, SelectionChangedEventArgs e)

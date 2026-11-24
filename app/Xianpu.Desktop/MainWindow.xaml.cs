@@ -59,8 +59,25 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = _vm;
+        _vm.AttachDialogService(new Services.WpfDialogService(this));
         _vm.UndoRequested += PerformUndo;
         _vm.RedoRequested += PerformRedo;
+        _vm.FilterStateChanged += () =>
+        {
+            if (LibrarySearchPlaceholder is not null)
+                LibrarySearchPlaceholder.Visibility = _vm.IsSearchEmpty ? Visibility.Visible : Visibility.Collapsed;
+            UpdateLibraryFilterButtons();
+            SyncLibraryListSelection();
+        };
+        _vm.SaveRequested += SaveLibraryQuietly;
+        _vm.FavoriteVisualRefreshRequested += UpdateFavoriteToggleVisual;
+        _vm.CategoryOptionsRefreshRequested += RefreshCategoryOptions;
+        _vm.SelectSongRequested += SelectSong;
+        _vm.BpmChangedWhileEditing += bpm =>
+        {
+            if (_metronome.IsRunning)
+                _metronome.Bpm = bpm;
+        };
         ApplyAdaptiveInitialWindowSize();
         LoadWindowIcon();
 
@@ -259,12 +276,7 @@ public partial class MainWindow : Window
         StopAutoScroll(clearSession: true);
 
         _initializing = true;
-        TitleBox.Text = song.Title;
-        OriginalKeyBox.Text = song.OriginalKey;
-        SelectedKeyBox.Text = song.SelectedKey;
-        CapoBox.Text = song.Capo;
-        if (BpmBox is not null)
-            BpmBox.Text = song.Bpm > 0 ? song.Bpm.ToString(CultureInfo.InvariantCulture) : "";
+        _vm.SyncBpmTextFromSelectedSong();
         ColumnModeBox.SelectedValue = song.ColumnMode.ToString(CultureInfo.InvariantCulture);
         ChordDisplayBox.SelectedValue = string.IsNullOrWhiteSpace(song.ChordDisplayMode) ? "name" : song.ChordDisplayMode;
         if (SongCategoryBox is not null)
@@ -300,9 +312,7 @@ public partial class MainWindow : Window
 
     private void UpdateCaptionTitle()
     {
-        if (CaptionSongTitle is null) return;
-        var title = string.IsNullOrWhiteSpace(_selectedSong?.Title) ? "吉他歌词和弦记谱" : _selectedSong!.Title.Trim();
-        CaptionSongTitle.Text = $"· {title}";
+        _vm.UpdateCaptionTitle();
     }
 
     private void SelectedSong_PropertyChanged(object? sender, PropertyChangedEventArgs e)

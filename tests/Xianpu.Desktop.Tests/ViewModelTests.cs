@@ -120,4 +120,67 @@ public sealed class ViewModelTests
         Assert.Equal("♩ 节拍器", practice.MetronomeButtonText);
         Assert.Equal("", practice.MetronomeBeatText);
     }
+
+    [Fact]
+    public void MainViewModel_DialogCommandsAndBpmBinding_WorkWithoutWindow()
+    {
+        var fakeDialogs = new FakeDialogService
+        {
+            NextPromptResult = "演出必弹",
+            NextConfirmResult = true
+        };
+        var vm = new MainViewModel();
+        vm.AttachDialogService(fakeDialogs);
+
+        var song = new SongModel { Title = "旧歌名", Category = "民谣", Bpm = 72 };
+        vm.Library.Songs.Add(song);
+        vm.SelectedSong = song;
+        vm.SyncBpmTextFromSelectedSong();
+        Assert.Equal("72", vm.BpmText);
+
+        // Two-way BpmText updates SelectedSong.Bpm and clamps on commit
+        vm.BpmText = "128";
+        Assert.Equal(128, song.Bpm);
+        vm.BpmText = "999";
+        vm.CommitBpmText();
+        Assert.Equal(240, song.Bpm);
+        Assert.Equal("240", vm.BpmText);
+
+        // AddCategoryCommand via IDialogService
+        vm.AddCategoryCommand.Execute(null);
+        Assert.Contains("演出必弹", vm.Library.Categories);
+        Assert.Equal("演出必弹", song.Category);
+
+        // RenameSelectedSongCommand via IDialogService
+        fakeDialogs.NextPromptResult = "新歌名";
+        vm.RenameSelectedSongCommand.Execute(null);
+        Assert.Equal("新歌名", song.Title);
+        Assert.Equal("· 新歌名", vm.CaptionSongTitle);
+
+        // ToggleFavoriteCommand
+        vm.ToggleFavoriteCommand.Execute(null);
+        Assert.True(song.Favorite);
+
+        // DeleteSelectedSongCommand removes song and creates replacement when library becomes empty
+        SongModel? selectedNext = null;
+        vm.SelectSongRequested += s => selectedNext = s;
+        vm.DeleteSelectedSongCommand.Execute(null);
+        Assert.NotNull(selectedNext);
+        Assert.DoesNotContain(song, vm.Library.Songs);
+        Assert.Single(vm.Library.Songs);
+    }
+
+    private sealed class FakeDialogService : IDialogService
+    {
+        public string? NextPromptResult { get; set; }
+        public bool NextConfirmResult { get; set; } = true;
+
+        public void ShowInfo(string title, string message, string? actionLabel = null, Action? actionCallback = null) { }
+        public void ShowError(string title, string message) { }
+        public bool Confirm(string title, string message, string confirmText = "确定", bool isDanger = false) => NextConfirmResult;
+        public string? PromptSingleLine(string title, string label, string initial = "") => NextPromptResult;
+        public string? PromptLyrics(string title, string label, string initial = "", double height = 360) => NextPromptResult;
+        public string? PickOpenFile(string title, string filter) => null;
+        public string? PickSaveFile(string title, string filter, string defaultFileName) => null;
+    }
 }
