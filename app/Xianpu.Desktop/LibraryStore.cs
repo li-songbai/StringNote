@@ -229,6 +229,65 @@ public sealed class LibraryStore
         }
     }
 
+    public static string CrashLogPath =>
+        Path.Combine(DefaultDataDirectory, "logs", "crash.log");
+
+    public string? QuarantineCorruptedLibrary()
+    {
+        try
+        {
+            if (!File.Exists(LibraryPath))
+                return null;
+
+            var directory = Path.GetDirectoryName(LibraryPath)!;
+            var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            var dest = Path.Combine(directory, $"library.corrupted-{stamp}.json");
+            File.Move(LibraryPath, dest, overwrite: true);
+            return dest;
+        }
+        catch
+        {
+            try
+            {
+                if (!File.Exists(LibraryPath))
+                    return null;
+                var directory = Path.GetDirectoryName(LibraryPath)!;
+                var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+                var dest = Path.Combine(directory, $"library.corrupted-{stamp}.json");
+                File.Copy(LibraryPath, dest, overwrite: true);
+                return dest;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
+
+    public static void AppendCrashLog(string source, Exception ex)
+    {
+        try
+        {
+            var logPath = CrashLogPath;
+            var dir = Path.GetDirectoryName(logPath)!;
+            Directory.CreateDirectory(dir);
+
+            // Keep crash.log under ~512 KB to avoid unbounded growth
+            if (File.Exists(logPath) && new FileInfo(logPath).Length > 512 * 1024)
+            {
+                var prevPath = logPath + ".1";
+                try { File.Move(logPath, prevPath, overwrite: true); } catch { }
+            }
+
+            var entry = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{source}] [v{UpdateService.CurrentVersion}]{Environment.NewLine}{ex}{Environment.NewLine}{new string('-', 60)}{Environment.NewLine}";
+            File.AppendAllText(logPath, entry);
+        }
+        catch
+        {
+            // Logging must never throw a secondary exception
+        }
+    }
+
     public string? CreateManualSnapshot(string tag = "manual")
     {
         try
