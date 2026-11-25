@@ -163,6 +163,7 @@ public sealed class LibraryStore
                 loaded.CustomChordsByKey ?? new Dictionary<string, List<string>>(),
                 StringComparer.OrdinalIgnoreCase);
             loaded.CustomChordShapes ??= [];
+            loaded.TheoryNotes ??= [];
             if (applyCustomChords)
                 ChordCatalog.LoadCustomData(loaded.CustomChordsByKey, loaded.CustomChordShapes);
             foreach (var song in loaded.Songs)

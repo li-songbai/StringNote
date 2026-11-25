@@ -414,6 +414,7 @@ public partial class MainWindow
     {
         CommitPendingEditsBeforeExit();
         StopAutoScroll(clearSession: true);
+        TheoryStudio?.Dispose();
         _metronome.Dispose();
         _trayService?.Dispose();
         _trayService = null;
@@ -424,6 +425,7 @@ public partial class MainWindow
     {
         CommitPendingEditsBeforeExit();
         StopAutoScroll(clearSession: true);
+        TheoryStudio?.Dispose();
         _metronome.Dispose();
         _trayService?.Dispose();
         _trayService = null;
@@ -433,6 +435,7 @@ public partial class MainWindow
     protected override void OnClosed(EventArgs e)
     {
         StopAutoScroll(clearSession: true);
+        TheoryStudio?.Dispose();
         _metronome.Dispose();
         _trayService?.Dispose();
         _trayService = null;

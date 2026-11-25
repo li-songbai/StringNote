@@ -7,7 +7,8 @@ namespace Xianpu.Desktop;
 
 public partial class MainWindow
 {
-    private bool _libraryWasOpenBeforePractice = true;
+    private bool _libraryWasOpenBeforeOverlay = true;
+    private bool _inOverlayMode;
 
     private void BpmBox_LostFocus(object sender, RoutedEventArgs e)
     {
@@ -160,45 +161,104 @@ public partial class MainWindow
     {
         CommitInlineLyricEdit(refocusSurface: false);
         ChordPopover.IsOpen = false;
+        SyncWorkspaceModeVisuals();
 
-        if (isPractice)
+        if (isPractice && !_vm.IsTheoryMode)
         {
-            _libraryWasOpenBeforePractice = LibraryToggle?.IsChecked == true;
-            if (LibraryToggle is not null && LibraryToggle.IsChecked == true)
-                LibraryToggle.IsChecked = false;
+            SetStatus("已进入「练琴专注模式」（按 F5 可随时切回编辑模式，Space 控制滚屏暂停/继续）。");
+        }
+        else if (!_vm.IsPracticeMode && !_vm.IsTheoryMode)
+        {
+            SetStatus("已切回「编辑制谱模式」。");
+        }
+    }
+
+    private void ApplyTheoryMode(bool isTheory)
+    {
+        CommitInlineLyricEdit(refocusSurface: false);
+        ChordPopover.IsOpen = false;
+
+        if (isTheory)
+        {
+            StopAutoScroll(clearSession: false);
+            TheoryStudio?.OnEnteredStudio();
+        }
+        else
+        {
+            TheoryStudio?.OnLeftStudio();
+        }
+
+        SyncWorkspaceModeVisuals();
+
+        if (isTheory)
+        {
+            SetStatus("已进入「🎼 乐理指板」工作台（点击指板即可试听拨弦，按 F6 可随时切回谱面）。");
+        }
+        else if (!_vm.IsPracticeMode)
+        {
+            SetStatus("已切回「编辑制谱模式」。");
+        }
+    }
+
+    private void SyncWorkspaceModeVisuals()
+    {
+        var isTheory = _vm.IsTheoryMode;
+        var isPractice = _vm.IsPracticeMode && !isTheory;
+        var isEdit = !isPractice && !isTheory;
+
+        if (!isEdit)
+        {
+            if (!_inOverlayMode)
+            {
+                _libraryWasOpenBeforeOverlay = LibraryToggle?.IsChecked == true;
+                _inOverlayMode = true;
+                if (LibraryToggle is not null && LibraryToggle.IsChecked == true)
+                    LibraryToggle.IsChecked = false;
+            }
             if (ContinuousPaintToggle is not null && ContinuousPaintToggle.IsChecked == true)
                 ContinuousPaintToggle.IsChecked = false;
             if (LyricEditModeToggle is not null && LyricEditModeToggle.IsChecked == true)
                 LyricEditModeToggle.IsChecked = false;
         }
-        else
+        else if (_inOverlayMode)
         {
-            if (LibraryToggle is not null && _libraryWasOpenBeforePractice && LibraryToggle.IsChecked != true)
+            _inOverlayMode = false;
+            if (LibraryToggle is not null && _libraryWasOpenBeforeOverlay && LibraryToggle.IsChecked != true)
                 LibraryToggle.IsChecked = true;
         }
 
         if (FloatingChordBar is not null)
-            FloatingChordBar.Visibility = isPractice ? Visibility.Collapsed : Visibility.Visible;
+            FloatingChordBar.Visibility = isEdit ? Visibility.Visible : Visibility.Collapsed;
         if (InlineTransposeControls is not null)
-            InlineTransposeControls.Visibility = isPractice ? Visibility.Collapsed : Visibility.Visible;
+            InlineTransposeControls.Visibility = isEdit ? Visibility.Visible : Visibility.Collapsed;
+        if (ScoreScrollViewer is not null)
+            ScoreScrollViewer.Visibility = isTheory ? Visibility.Collapsed : Visibility.Visible;
         if (PracticeFloatingDock is not null)
             PracticeFloatingDock.Visibility = isPractice ? Visibility.Visible : Visibility.Collapsed;
+        if (TheoryStudio is not null)
+            TheoryStudio.Visibility = isTheory ? Visibility.Visible : Visibility.Collapsed;
 
-        if (EditModeButton is not null && PracticeModeButton is not null)
+        if (EditModeButton is not null)
         {
-            EditModeButton.Background = !isPractice ? Brushes.White : Brushes.Transparent;
-            EditModeButton.Foreground = !isPractice ? AppDialogs.TitleBrush : AppDialogs.MutedBrush;
-            EditModeButton.FontWeight = !isPractice ? FontWeights.SemiBold : FontWeights.Normal;
-
+            EditModeButton.Background = isEdit ? Brushes.White : Brushes.Transparent;
+            EditModeButton.Foreground = isEdit ? AppDialogs.TitleBrush : AppDialogs.MutedBrush;
+            EditModeButton.FontWeight = isEdit ? FontWeights.SemiBold : FontWeights.Normal;
+        }
+        if (PracticeModeButton is not null)
+        {
             PracticeModeButton.Background = isPractice ? Brushes.White : Brushes.Transparent;
             PracticeModeButton.Foreground = isPractice ? AppDialogs.AccentHoverBrush : AppDialogs.MutedBrush;
             PracticeModeButton.FontWeight = isPractice ? FontWeights.SemiBold : FontWeights.Normal;
         }
+        if (TheoryModeButton is not null)
+        {
+            TheoryModeButton.Background = isTheory ? Brushes.White : Brushes.Transparent;
+            TheoryModeButton.Foreground = isTheory ? AppDialogs.AccentHoverBrush : AppDialogs.MutedBrush;
+            TheoryModeButton.FontWeight = isTheory ? FontWeights.SemiBold : FontWeights.Normal;
+        }
 
-        UpdateViewportScale();
-        SetStatus(isPractice
-            ? "已进入「练琴专注模式」（按 F5 可随时切回编辑模式，Space 控制滚屏暂停/继续）。"
-            : "已切回「编辑制谱模式」。");
+        if (!isTheory)
+            UpdateViewportScale();
     }
 
     private void DockToggleScroll_Click(object sender, RoutedEventArgs e)

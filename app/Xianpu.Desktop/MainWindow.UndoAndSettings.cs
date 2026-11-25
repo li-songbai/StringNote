@@ -11,7 +11,7 @@ public partial class MainWindow
     {
         base.OnPreviewKeyDown(e);
 
-        if (e.Key == Key.F2 && Keyboard.Modifiers == ModifierKeys.None && _selectedSong is not null && !_vm.IsPracticeMode)
+        if (e.Key == Key.F2 && Keyboard.Modifiers == ModifierKeys.None && _selectedSong is not null && !_vm.IsPracticeMode && !_vm.IsTheoryMode)
         {
             if (!IsInlineLyricEditorOpen)
             {
@@ -31,6 +31,13 @@ public partial class MainWindow
         if (e.Key == Key.F5 && Keyboard.Modifiers == ModifierKeys.None && Keyboard.FocusedElement is not TextBoxBase)
         {
             _vm.TogglePracticeModeCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.F6 && Keyboard.Modifiers == ModifierKeys.None && Keyboard.FocusedElement is not TextBoxBase)
+        {
+            _vm.ToggleTheoryModeCommand.Execute(null);
             e.Handled = true;
             return;
         }
@@ -61,6 +68,7 @@ public partial class MainWindow
         }
 
         if (e.Key == Key.Space &&
+            !_vm.IsTheoryMode &&
             (_autoScrollEngaged || _vm.IsPracticeMode) &&
             Keyboard.Modifiers == ModifierKeys.None &&
             Keyboard.FocusedElement is not TextBoxBase &&
@@ -72,7 +80,8 @@ public partial class MainWindow
             return;
         }
 
-        if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control &&
+        if (!_vm.IsTheoryMode &&
+            (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control &&
             (Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.None)
         {
             // Keep native text undo/redo inside text inputs (TitleBox, search box, inline chord input, etc.)
@@ -224,6 +233,7 @@ public partial class MainWindow
         _library.Songs ??= [];
         _library.CustomChordsByKey ??= new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         _library.CustomChordShapes ??= [];
+        _library.TheoryNotes ??= [];
         ChordCatalog.LoadCustomData(_library.CustomChordsByKey, _library.CustomChordShapes);
 
         if (_library.Songs.Count == 0)

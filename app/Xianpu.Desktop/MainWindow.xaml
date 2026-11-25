@@ -202,6 +202,10 @@
                                     WindowChrome.IsHitTestVisibleInChrome="True"
                                     Background="Transparent" BorderBrush="Transparent" Foreground="#64748B"
                                     Command="{Binding EnterPracticeModeCommand}" ToolTip="练琴专注模式：隐藏编辑栏，放大谱面视野并浮出滚屏/节拍器（F5 切换）" />
+                            <Button x:Name="TheoryModeButton" Content="🎼 乐理指板" Padding="11,4" FontSize="11.5"
+                                    WindowChrome.IsHitTestVisibleInChrome="True"
+                                    Background="Transparent" BorderBrush="Transparent" Foreground="#64748B"
+                                    Command="{Binding EnterTheoryModeCommand}" ToolTip="乐理与指板工作台：CAGED 五色拼图、21 种音阶、和弦解剖、和弦进行与个人乐理收集本（F6 切换）" />
                         </StackPanel>
                     </Border>
 
@@ -572,6 +576,9 @@
                             </StackPanel>
                         </Border>
                     </ScrollViewer>
+
+                    <!-- Music Theory & CAGED Fretboard Studio (Shown in Theory Mode) -->
+                    <local:TheoryStudioView x:Name="TheoryStudio" Grid.Row="0" Grid.RowSpan="2" Visibility="Collapsed" />
 
                     <!-- Floating Practice Dock (Shown at bottom-center in Practice Mode) -->
                     <Border x:Name="PracticeFloatingDock" Grid.Row="1" Visibility="Collapsed"

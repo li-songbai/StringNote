@@ -11,6 +11,24 @@ public sealed class LibraryData
     public ObservableCollection<SongModel> Songs { get; set; } = [];
     public Dictionary<string, List<string>> CustomChordsByKey { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public List<CustomChordDefinition> CustomChordShapes { get; set; } = [];
+    public List<TheoryNoteItem> TheoryNotes { get; set; } = [];
+}
+
+public sealed class TheoryNoteItem
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Title { get; set; } = "未命名乐理卡片";
+    public string Tag { get; set; } = "CAGED";
+    public string Content { get; set; } = "";
+    public int TonicPitch { get; set; } = 0; // 0 = C
+    public string ScaleId { get; set; } = "major";
+    public string TuningId { get; set; } = "standard";
+    public int Capo { get; set; } = 0;
+    public bool ShowCaged { get; set; } = true;
+    public string ActiveCagedFilter { get; set; } = "ALL"; // ALL / C / A / G / E / D
+    public bool ShowCapsules { get; set; } = false;
+    public string HighlightChord { get; set; } = "";
+    public DateTime UpdatedAt { get; set; } = DateTime.Now;
 }
 
 public sealed class CustomChordDefinition

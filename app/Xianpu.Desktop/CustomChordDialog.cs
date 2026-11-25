@@ -118,9 +118,15 @@ internal static class CustomChordDialog
             FontSize = 11.5,
             Cursor = Cursors.Hand
         };
-        if (owner?.TryFindResource(typeof(Button)) is Style btnStyle)
-            clearFretBtn.Style = btnStyle;
         controlBar.Children.Add(clearFretBtn);
+
+        var cycleVoicingBtn = AppDialogs.CreateAccentOutlineButton(owner, "↻ 换把位", minWidth: 88);
+        cycleVoicingBtn.Padding = new Thickness(8, 3, 8, 3);
+        cycleVoicingBtn.Margin = new Thickness(0, 2, 0, 2);
+        cycleVoicingBtn.FontSize = 11.5;
+        cycleVoicingBtn.ToolTip = "根据乐理自动推导并在多个可用吉他把位间循环切换";
+        cycleVoicingBtn.IsEnabled = false;
+        controlBar.Children.Add(cycleVoicingBtn);
 
         leftPanel.Children.Add(controlBar);
 
@@ -204,33 +210,66 @@ internal static class CustomChordDialog
         // ─── Wiring ───────────────────────────────────────────────────────────────────
         var hasEditedFretboard = false;
         var syncing = false;
+        IReadOnlyList<ChordShape> currentCandidates = [];
+        var candidateIndex = 0;
+
+        void UpdateCycleButtonVisual()
+        {
+            if (currentCandidates.Count > 1)
+            {
+                cycleVoicingBtn.Content = $"↻ 换把位 ({candidateIndex + 1}/{currentCandidates.Count})";
+                cycleVoicingBtn.IsEnabled = true;
+            }
+            else if (currentCandidates.Count == 1)
+            {
+                cycleVoicingBtn.Content = "↻ 自动推导";
+                cycleVoicingBtn.IsEnabled = true;
+            }
+            else
+            {
+                cycleVoicingBtn.Content = "↻ 换把位";
+                cycleVoicingBtn.IsEnabled = false;
+            }
+        }
 
         void RefreshPreview()
         {
             var rawName = ChordCatalog.NormalizeChordName(nameBox.Text);
             var displayName = string.IsNullOrWhiteSpace(rawName) ? "和弦" : rawName;
-            var builtIn = ChordCatalog.ByName(rawName);
+            var activeCandidate = candidateIndex >= 0 && candidateIndex < currentCandidates.Count
+                ? currentCandidates[candidateIndex]
+                : ChordCatalog.ByName(rawName);
 
-            if (!hasEditedFretboard && builtIn is not null)
+            if (!hasEditedFretboard && activeCandidate is not null)
             {
                 previewView.Shape = new ChordShape
                 {
-                    Id = builtIn.Id,
+                    Id = activeCandidate.Id,
                     Name = displayName,
-                    Type = builtIn.Type,
-                    Frets = builtIn.Frets,
-                    Fingers = builtIn.Fingers,
-                    BaseFret = builtIn.BaseFret,
-                    Barre = builtIn.Barre,
-                    Label = builtIn.Label
+                    Type = activeCandidate.Type,
+                    Frets = activeCandidate.Frets,
+                    Fingers = activeCandidate.Fingers,
+                    BaseFret = activeCandidate.BaseFret,
+                    Barre = activeCandidate.Barre,
+                    Label = activeCandidate.Label
                 };
-                statusPill.Text = "已匹配内置指法（也可在下方调整）";
+
+                if (ChordCatalog.HasCustomShape(rawName) && candidateIndex == 0)
+                    statusPill.Text = "已加载自定义按法（可点「换把位」或直接微调）";
+                else if (ChordCatalog.HasCuratedBuiltIn(rawName) && candidateIndex == 0)
+                    statusPill.Text = currentCandidates.Count > 1
+                        ? $"已匹配经典指法（共 {currentCandidates.Count} 个把位可切换）"
+                        : "已匹配经典指法（也可在下方微调）";
+                else
+                    statusPill.Text = currentCandidates.Count > 1
+                        ? $"✨ 已按乐理自动推导指法（共 {currentCandidates.Count} 个把位可切换）"
+                        : "✨ 已按乐理自动推导指法（也可在下方微调）";
                 statusPill.Foreground = AppDialogs.AccentBrush;
             }
             else if (fretboard.HasAnyNote)
             {
                 previewView.Shape = fretboard.BuildShape(displayName);
-                statusPill.Text = "将使用下方自定义的左手按法";
+                statusPill.Text = "将保存下方自定义的左手按法";
                 statusPill.Foreground = AppDialogs.AccentBrush;
             }
             else
@@ -245,10 +284,12 @@ internal static class CustomChordDialog
                     Label = "未设置指法"
                 };
                 statusPill.Text = string.IsNullOrWhiteSpace(rawName)
-                    ? "请输入和弦名称"
-                    : "无内置指法，可在下方点选按法或仅保存名称";
+                    ? "请输入和弦名称（输入后自动按乐理推导指法）"
+                    : "暂未识别该和弦记号，可在下方手动点选按法";
                 statusPill.Foreground = AppDialogs.MutedBrush;
             }
+
+            UpdateCycleButtonVisual();
         }
 
         void LoadShapeToBoard(ChordShape shape)
@@ -265,20 +306,43 @@ internal static class CustomChordDialog
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(normalizedInitial) && ChordCatalog.ByName(normalizedInitial) is { } existingShape)
+        void RefreshCandidatesForName(bool reloadBoard)
         {
-            LoadShapeToBoard(existingShape);
+            var normalized = ChordCatalog.NormalizeChordName(nameBox.Text);
+            currentCandidates = ChordCatalog.GetCandidates(normalized);
+            candidateIndex = 0;
+            if (reloadBoard && currentCandidates.Count > 0)
+                LoadShapeToBoard(currentCandidates[0]);
+            UpdateCycleButtonVisual();
         }
+
+        RefreshCandidatesForName(reloadBoard: !string.IsNullOrWhiteSpace(normalizedInitial));
 
         nameBox.TextChanged += (_, _) =>
         {
-            if (!hasEditedFretboard)
+            RefreshCandidatesForName(reloadBoard: !hasEditedFretboard);
+            RefreshPreview();
+        };
+
+        cycleVoicingBtn.Click += (_, _) =>
+        {
+            if (currentCandidates.Count == 0)
+                RefreshCandidatesForName(reloadBoard: false);
+            if (currentCandidates.Count == 0)
+                return;
+
+            if (hasEditedFretboard && currentCandidates.Count == 1)
             {
-                var normalized = ChordCatalog.NormalizeChordName(nameBox.Text);
-                if (ChordCatalog.ByName(normalized) is { } matched)
-                {
-                    LoadShapeToBoard(matched);
-                }
+                candidateIndex = 0;
+                hasEditedFretboard = false;
+                LoadShapeToBoard(currentCandidates[0]);
+            }
+            else
+            {
+                candidateIndex = (candidateIndex + 1) % currentCandidates.Count;
+                LoadShapeToBoard(currentCandidates[candidateIndex]);
+                // Mark as customized when choosing a non-default candidate so saving persists the chosen voicing
+                hasEditedFretboard = candidateIndex != 0;
             }
             RefreshPreview();
         };
@@ -431,16 +495,22 @@ internal static class CustomChordDialog
             InvalidateVisual();
         }
 
-        public ChordShape BuildShape(string name) => new()
+        public ChordShape BuildShape(string name)
         {
-            Id = $"custom-{name}",
-            Name = name,
-            Type = "custom",
-            Frets = (int?[])_frets.Clone(),
-            Fingers = (int[])_fingers.Clone(),
-            BaseFret = _baseFret,
-            Label = "自定义和弦"
-        };
+            var fretsCopy = (int?[])_frets.Clone();
+            var fingersCopy = (int[])_fingers.Clone();
+            return new ChordShape
+            {
+                Id = $"custom-{name}",
+                Name = name,
+                Type = "custom",
+                Frets = fretsCopy,
+                Fingers = fingersCopy,
+                BaseFret = _baseFret,
+                Barre = ChordVoicingEngine.InferBarre(fretsCopy, fingersCopy),
+                Label = "自定义和弦"
+            };
+        }
 
         public CustomChordDefinition BuildDefinition(string name) => new()
         {

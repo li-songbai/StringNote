@@ -26,7 +26,21 @@ public static class ChordCatalog
     {
         if (string.IsNullOrWhiteSpace(id)) return null;
         if (CustomById.TryGetValue(id, out var custom)) return custom;
-        return ById.TryGetValue(id, out var shape) ? shape : null;
+        if (ById.TryGetValue(id, out var shape)) return shape;
+        if (id.StartsWith("auto:", StringComparison.OrdinalIgnoreCase))
+        {
+            var lastColon = id.LastIndexOf(':');
+            if (lastColon > 5)
+            {
+                var namePart = id[5..lastColon];
+                if (int.TryParse(id[(lastColon + 1)..], out var idx) && idx >= 0)
+                {
+                    var derived = ChordVoicingEngine.DeriveCandidates(namePart);
+                    if (idx < derived.Count) return derived[idx];
+                }
+            }
+        }
+        return null;
     }
 
     public static ChordShape? ByName(string? name)
@@ -34,14 +48,64 @@ public static class ChordCatalog
         if (string.IsNullOrWhiteSpace(name)) return null;
         var normalized = NormalizeChordName(name);
         if (CustomByName.TryGetValue(normalized, out var custom)) return custom;
-        return FirstByName.TryGetValue(normalized, out var shape) ? shape : null;
+        if (FirstByName.TryGetValue(normalized, out var shape)) return shape;
+        return ChordVoicingEngine.DeriveCandidates(normalized, maxResults: 1).FirstOrDefault();
     }
 
     public static ChordShape? BuiltInByName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return null;
         var normalized = NormalizeChordName(name);
-        return FirstByName.TryGetValue(normalized, out var shape) ? shape : null;
+        if (FirstByName.TryGetValue(normalized, out var shape)) return shape;
+        return ChordVoicingEngine.DeriveCandidates(normalized, maxResults: 1).FirstOrDefault();
+    }
+
+    public static bool HasCuratedBuiltIn(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        var normalized = NormalizeChordName(name);
+        return FirstByName.ContainsKey(normalized);
+    }
+
+    public static bool HasCustomShape(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        var normalized = NormalizeChordName(name);
+        return CustomByName.ContainsKey(normalized);
+    }
+
+    public static IReadOnlyList<ChordShape> GetCandidates(string? name, int maxResults = 6)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return [];
+        var normalized = NormalizeChordName(name);
+        if (string.IsNullOrWhiteSpace(normalized)) return [];
+
+        var list = new List<ChordShape>();
+        var seenFrets = new HashSet<string>(StringComparer.Ordinal);
+
+        void TryAdd(ChordShape shape)
+        {
+            var fp = string.Join(',', shape.Frets.Select(f => f.HasValue ? f.Value.ToString() : "x"));
+            if (seenFrets.Add(fp))
+                list.Add(shape);
+        }
+
+        if (CustomByName.TryGetValue(normalized, out var custom))
+            TryAdd(custom);
+
+        foreach (var builtIn in Shapes)
+        {
+            if (string.Equals(builtIn.Name, normalized, StringComparison.OrdinalIgnoreCase))
+                TryAdd(builtIn);
+        }
+
+        foreach (var derived in ChordVoicingEngine.DeriveCandidates(normalized, maxResults))
+        {
+            if (list.Count >= maxResults) break;
+            TryAdd(derived);
+        }
+
+        return list;
     }
 
     public static string NormalizeKeyBucket(string? key)
@@ -107,7 +171,7 @@ public static class ChordCatalog
                     Frets = frets,
                     Fingers = fingers,
                     BaseFret = Math.Clamp(def.BaseFret <= 0 ? 1 : def.BaseFret, 1, 15),
-                    Barre = null,
+                    Barre = ChordVoicingEngine.InferBarre(frets, fingers),
                     Label = string.IsNullOrWhiteSpace(def.Label) ? "自定义和弦" : def.Label.Trim()
                 };
                 CustomByName[normalized] = shape;
@@ -147,8 +211,10 @@ public static class ChordCatalog
         quality = Regex.Replace(quality, @"^add", "add", RegexOptions.IgnoreCase);
         quality = Regex.Replace(quality, @"^dim", "dim", RegexOptions.IgnoreCase);
         quality = Regex.Replace(quality, @"^aug", "aug", RegexOptions.IgnoreCase);
-        if (quality.StartsWith("M", StringComparison.Ordinal) && !quality.StartsWith("Maj", StringComparison.Ordinal))
-            quality = "m" + quality[1..];
+        if (quality.Equals("M", StringComparison.Ordinal))
+            return "";
+        if (Regex.IsMatch(quality, @"^M(7|9|11|13)"))
+            quality = "maj" + quality[1..];
         return quality;
     }
 
@@ -246,6 +312,31 @@ public static class ChordCatalog
         Add("Dsus2", "Dsus2", "open", [null, null, 0, 2, 3, 0], [0, 0, 0, 1, 3, 0]);
         Add("Dsus4", "Dsus4", "open", [null, null, 0, 2, 3, 3], [0, 0, 0, 1, 3, 4]);
         Add("Esus4", "Esus4", "open", [0, 2, 2, 2, 0, 0], [0, 1, 2, 3, 0, 0]);
+        Add("Gsus4", "Gsus4", "open", [3, 3, 0, 0, 1, 3], [2, 3, 0, 0, 1, 4]);
+        Add("Fsus2", "Fsus2", "open", [null, null, 3, 0, 1, 1], [0, 0, 3, 0, 1, 1], 1, new(1, 4, 5));
+        Add("Csus2", "Csus2", "open", [null, 3, 0, 0, 1, 3], [0, 2, 0, 0, 1, 4]);
+        Add("Csus4", "Csus4", "open", [null, 3, 3, 0, 1, 1], [0, 3, 4, 0, 1, 1], 1, new(1, 4, 5));
+        Add("C9", "C9", "open", [null, 3, 2, 3, 3, 3], [0, 2, 1, 3, 3, 3], 1, null, "经典把位");
+        Add("Am7sus4", "Am7sus4", "open", [null, 0, 2, 0, 3, 0], [0, 0, 1, 0, 3, 0]);
+        Add("Gadd9", "Gadd9", "open", [3, 2, 0, 2, 0, 3], [2, 1, 0, 3, 0, 4]);
+        Add("G6", "G6", "open", [3, 2, 0, 0, 0, 0], [2, 1, 0, 0, 0, 0]);
+        Add("C6", "C6", "open", [null, 3, 2, 2, 1, 0], [0, 4, 2, 3, 1, 0]);
+        Add("Em9", "Em9", "open", [0, 2, 0, 0, 0, 2], [0, 1, 0, 0, 0, 2]);
+        Add("Emadd9", "Emadd9", "open", [0, 2, 4, 0, 0, 0], [0, 1, 3, 0, 0, 0]);
+        Add("Eadd9", "Eadd9", "open", [0, 2, 4, 1, 0, 0], [0, 2, 4, 1, 0, 0]);
+        Add("Aadd9", "Aadd9", "open", [null, 0, 2, 4, 2, 0], [0, 0, 1, 4, 2, 0]);
+        Add("Em/D", "Em/D", "open", [null, null, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], 1, null, "转位和弦");
+        Add("Em/B", "Em/B", "open", [null, 2, 2, 0, 0, 0], [0, 2, 3, 0, 0, 0], 1, null, "转位和弦");
+        Add("G/F#", "G/F#", "open", [2, null, 0, 0, 0, 3], [1, 0, 0, 0, 0, 3], 1, null, "转位和弦");
+        Add("Am/E", "Am/E", "open", [0, 0, 2, 2, 1, 0], [0, 0, 2, 3, 1, 0], 1, null, "转位和弦");
+        Add("Am7/G", "Am7/G", "open", [3, 0, 2, 0, 1, 0], [3, 0, 2, 0, 1, 0], 1, null, "转位和弦");
+        Add("C/B", "C/B", "open", [null, 2, 2, 0, 1, 0], [0, 2, 3, 0, 1, 0], 1, null, "转位和弦");
+        Add("F/C", "F/C", "open", [null, 3, 3, 2, 1, 1], [0, 3, 4, 2, 1, 1], 1, new(1, 4, 5), "转位和弦");
+        Add("F/G", "F/G", "open", [3, null, 3, 2, 1, 1], [3, 0, 4, 2, 1, 1], 1, new(1, 4, 5), "转位和弦");
+        Add("Dm/C", "Dm/C", "open", [null, 3, 0, 2, 3, 1], [0, 3, 0, 2, 4, 1], 1, null, "转位和弦");
+        Add("Dm7/G", "Dm7/G", "open", [3, null, 0, 2, 1, 1], [3, 0, 0, 2, 1, 1], 1, new(1, 4, 5), "转位和弦");
+        Add("Fmaj7/G", "Fmaj7/G", "open", [3, null, 3, 2, 1, 0], [3, 0, 4, 2, 1, 0], 1, null, "转位和弦");
+        Add("D/A", "D/A", "open", [null, 0, 0, 2, 3, 2], [0, 0, 0, 1, 3, 2], 1, null, "转位和弦");
 
         var roots = new[] { "C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B" };
         var eRootIndex = Array.IndexOf(roots, "E");

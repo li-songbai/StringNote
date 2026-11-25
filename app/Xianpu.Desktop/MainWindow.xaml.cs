@@ -79,6 +79,8 @@ public partial class MainWindow : Window
                 _metronome.Bpm = bpm;
         };
         _vm.PracticeModeChanged += ApplyPracticeMode;
+        _vm.TheoryModeChanged += ApplyTheoryMode;
+        TheoryStudio.AttachHost(() => _selectedSong, () => _library, SaveLibraryQuietly, SetStatus);
         ApplyAdaptiveInitialWindowSize();
         LoadWindowIcon();
 
@@ -309,6 +311,8 @@ public partial class MainWindow : Window
         ResetUndoHistory(song);
         UpdateActionStates();
         UpdateViewportScale();
+        if (_vm.IsTheoryMode)
+            TheoryStudio.SyncWithCurrentSong(silent: true);
     }
 
     private void FlushPendingHeaderSave()

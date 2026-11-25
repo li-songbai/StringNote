@@ -25,7 +25,12 @@ StringNote/
 │   ├── MainWindow.xaml(.cs)     # 主窗口生命周期、选歌协调与视口缩放（按职责拆分为 MainWindow.ChordPopover.cs / MainWindow.InlineLyric.cs / MainWindow.EditingAndIO.cs / MainWindow.Library.cs / MainWindow.UndoAndSettings.cs / MainWindow.Practice.cs / MainWindow.UpdatesAndChrome.cs）
 │   ├── ScoreSurface.cs          # 核心自绘谱面画布（流式合行/单行/双栏、原位歌词坐标映射、和弦拖拽、键盘走位、叠行歌词、六线谱嵌入与 PNG 导出；拆分 ScoreSurface.Printing.cs 处理 A4 分页打印）
 │   ├── LyricLineEditHelper.cs   # 谱面原位改词与断句时的和弦字位跟随平移、叠行同步切分算法
-│   ├── ChordCatalog.cs          # 各调常用和弦、开放/横按指法库与按调自定义和弦持久化
+│   ├── ChordCatalog.cs          # 各调常用和弦、开放/横按指法库、候选把位集合与按调自定义和弦持久化
+│   ├── ChordVoicingEngine.cs    # 零依赖乐理和弦解析与吉他指板人体工学把位推导引擎（支持任意延伸/变化/转位和弦自动出图）
+│   ├── MusicTheoryCatalog.cs    # 乐理指板核心引擎：9 种调弦、21 种音阶、CAGED 五色拼图/每弦两音计算、自然音阶和弦解剖、进行预设与语音连接/色彩丰富推荐、8 节互动乐理课
+│   ├── GuitarAudioService.cs    # 零依赖 Karplus-Strong 物理建模原声吉他拨弦合成器（支持单音、扫弦、分解与音阶上行试听）
+│   ├── FretboardCanvas.cs       # 0–17 品全景 2D 矢量交互指板（枫木/玫瑰木、变调夹、CAGED 五色拼图框、每弦两音胶囊、靶向音染色、点弦发声）
+│   ├── TheoryStudioView.cs      # 「🎼 乐理指板」第三工作模式主视图（互动 CAGED 课 / 和弦解剖库 / 和弦进行与靶向音 / 我的乐理收集本）
 │   ├── ChordDiagramView.cs      # 六弦和弦指法图渲染组件
 │   ├── ChordTranspose.cs        # 全谱半音升降调与按调名批量移调逻辑
 │   ├── CustomChordDialog.cs     # 按调号新增/编辑自定义左手和弦与指法图弹窗

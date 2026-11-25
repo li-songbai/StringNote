@@ -89,10 +89,20 @@ public sealed class ViewModelTests
         Assert.Equal("晴天 (副本)", dup.Title);
 
         Assert.False(vm.IsPracticeMode);
+        Assert.False(vm.IsTheoryMode);
         vm.TogglePracticeModeCommand.Execute(null);
         Assert.True(vm.IsPracticeMode);
+        Assert.False(vm.IsTheoryMode);
+        vm.EnterTheoryModeCommand.Execute(null);
+        Assert.True(vm.IsTheoryMode);
+        Assert.False(vm.IsPracticeMode);
+        vm.ToggleTheoryModeCommand.Execute(null);
+        Assert.False(vm.IsTheoryMode);
+        Assert.False(vm.IsPracticeMode);
+        vm.EnterTheoryModeCommand.Execute(null);
         vm.EnterEditModeCommand.Execute(null);
         Assert.False(vm.IsPracticeMode);
+        Assert.False(vm.IsTheoryMode);
 
         // UndoCommand / RedoCommand CanExecute reactivity
         vm.UndoManager.Reset(s1);

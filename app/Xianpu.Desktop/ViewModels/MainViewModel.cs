@@ -60,6 +60,9 @@ public sealed partial class MainViewModel : ObservableObject
     private bool _isPracticeMode;
 
     [ObservableProperty]
+    private bool _isTheoryMode;
+
+    [ObservableProperty]
     private string _undoToolTip = "撤销上一步谱面编辑 (Ctrl+Z)";
 
     [ObservableProperty]
@@ -74,6 +77,7 @@ public sealed partial class MainViewModel : ObservableObject
     public event Action<SongModel>? SelectSongRequested;
     public event Action<int>? BpmChangedWhileEditing;
     public event Action<bool>? PracticeModeChanged;
+    public event Action<bool>? TheoryModeChanged;
 
     public void AttachDialogService(IDialogService dialogs) => _dialogs = dialogs;
 
@@ -166,14 +170,59 @@ public sealed partial class MainViewModel : ObservableObject
         PracticeModeChanged?.Invoke(value);
     }
 
-    [RelayCommand]
-    private void EnterEditMode() => IsPracticeMode = false;
+    partial void OnIsTheoryModeChanged(bool value)
+    {
+        TheoryModeChanged?.Invoke(value);
+    }
 
     [RelayCommand]
-    private void EnterPracticeMode() => IsPracticeMode = true;
+    private void EnterEditMode()
+    {
+        IsTheoryMode = false;
+        IsPracticeMode = false;
+    }
 
     [RelayCommand]
-    private void TogglePracticeMode() => IsPracticeMode = !IsPracticeMode;
+    private void EnterPracticeMode()
+    {
+        IsTheoryMode = false;
+        IsPracticeMode = true;
+    }
+
+    [RelayCommand]
+    private void TogglePracticeMode()
+    {
+        if (IsPracticeMode)
+        {
+            IsPracticeMode = false;
+        }
+        else
+        {
+            IsTheoryMode = false;
+            IsPracticeMode = true;
+        }
+    }
+
+    [RelayCommand]
+    private void EnterTheoryMode()
+    {
+        IsPracticeMode = false;
+        IsTheoryMode = true;
+    }
+
+    [RelayCommand]
+    private void ToggleTheoryMode()
+    {
+        if (IsTheoryMode)
+        {
+            IsTheoryMode = false;
+        }
+        else
+        {
+            IsPracticeMode = false;
+            IsTheoryMode = true;
+        }
+    }
 
     [RelayCommand(CanExecute = nameof(CanUndo))]
     private void Undo() => UndoRequested?.Invoke();

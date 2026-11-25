@@ -367,4 +367,211 @@ public sealed class CoreLogicTests
         // Interlude moved to stay after the second half of the split sentence
         Assert.Equal(1, song.TabSections[0].InsertAfterLineIndex);
     }
+
+    [Fact]
+    public void ChordVoicingEngine_DerivesValidPlayableDiagramsForExtendedAndAlteredChords()
+    {
+        int[] openPitches = [4, 9, 2, 7, 11, 4];
+        string[] testChords =
+        [
+            "C9", "Am7sus4", "Fsus2", "Gsus4", "Gadd9",
+            "Ebmaj7", "Dbm7", "F#m7b5", "Cdim7", "Gaug",
+            "E7#9", "Am11", "G13", "C5", "CM7", "Gb", "Bb9", "F#7sus4"
+        ];
+
+        foreach (var name in testChords)
+        {
+            var shape = ChordCatalog.ByName(name);
+            Assert.NotNull(shape);
+            Assert.True(ChordVoicingEngine.TryParseChord(name, out var parsed), $"Should parse {name}");
+
+            var lowestSounding = -1;
+            var soundingPitches = new HashSet<int>();
+            var minFret = 99;
+            var maxFret = 0;
+
+            for (var s = 0; s < 6; s++)
+            {
+                if (shape!.Frets[s] is not { } f) continue;
+                if (lowestSounding < 0) lowestSounding = s;
+                var pc = (openPitches[s] + f) % 12;
+                Assert.True(parsed.AllPitches.Contains(pc), $"{name}: string {s} fret {f} pitch {pc} not in chord");
+                soundingPitches.Add(pc);
+                if (f > 0)
+                {
+                    if (f < minFret) minFret = f;
+                    if (f > maxFret) maxFret = f;
+                }
+            }
+
+            Assert.True(lowestSounding >= 0, $"{name}: must have sounding strings");
+            var bassPc = (openPitches[lowestSounding] + shape!.Frets[lowestSounding]!.Value) % 12;
+            Assert.Equal(parsed.BassPitch, bassPc);
+
+            // Must fit inside the 4-fret diagram grid (BaseFret .. BaseFret + 3)
+            if (maxFret > 0)
+            {
+                Assert.True(maxFret - shape.BaseFret <= 3, $"{name}: maxFret {maxFret} overflows BaseFret {shape.BaseFret}");
+                Assert.True(minFret >= shape.BaseFret, $"{name}: minFret {minFret} below BaseFret {shape.BaseFret}");
+            }
+
+            foreach (var req in parsed.RequiredPitches)
+                Assert.Contains(req, soundingPitches);
+        }
+
+        // CM7 normalizes to Cmaj7 (Major 7th, not minor 7th!)
+        Assert.Equal("Cmaj7", ChordCatalog.NormalizeChordName("CM7"));
+    }
+
+    [Fact]
+    public void ChordVoicingEngine_EnforcesSlashChordBassAndProducesMultipleCandidates()
+    {
+        int[] openPitches = [4, 9, 2, 7, 11, 4];
+        string[] slashChords = ["Am7/D", "Fmaj7/C", "Eb/G", "D/F#", "G/B", "Dm7/G", "Cmaj7/E"];
+
+        foreach (var name in slashChords)
+        {
+            var shape = ChordCatalog.ByName(name);
+            Assert.NotNull(shape);
+            Assert.True(ChordVoicingEngine.TryParseChord(name, out var parsed));
+
+            var lowestStr = Array.FindIndex(shape!.Frets, f => f.HasValue);
+            Assert.True(lowestStr >= 0);
+            var actualBass = (openPitches[lowestStr] + shape.Frets[lowestStr]!.Value) % 12;
+            Assert.Equal(parsed.BassPitch, actualBass);
+        }
+
+        // Multiple ergonomic candidates available for position cycling & ByShapeId round-trip
+        var candidates = ChordCatalog.GetCandidates("Ebmaj7");
+        Assert.True(candidates.Count >= 2);
+        var second = candidates[1];
+        var resolvedById = ChordCatalog.ByShapeId(second.Id);
+        Assert.NotNull(resolvedById);
+        Assert.Equal(second.Frets, resolvedById!.Frets);
+    }
+
+    [Fact]
+    public void MusicTheoryCatalog_ComputesInterlockingCagedBoxesAndDiatonicChords()
+    {
+        var std = MusicTheoryCatalog.GetTuning("standard");
+        var cBoxes = MusicTheoryCatalog.ComputeCagedBoxes(tonicPitch: 0, isMinorScale: false, std, maxFret: 17);
+        Assert.True(cBoxes.Count >= 5);
+
+        // Verify adjacent CAGED boxes interlock seamlessly: box[i].RightFrets == box[i+1].LeftFrets
+        for (var i = 0; i < cBoxes.Count - 1; i++)
+            Assert.Equal(cBoxes[i].RightFrets, cBoxes[i + 1].LeftFrets);
+
+        // Relative minor (Am) shares the exact same CAGED positions as C Major
+        var amBoxes = MusicTheoryCatalog.ComputeCagedBoxes(tonicPitch: 9, isMinorScale: true, std, maxFret: 17);
+        Assert.Equal(cBoxes.Count, amBoxes.Count);
+        for (var i = 0; i < cBoxes.Count; i++)
+        {
+            Assert.Equal(cBoxes[i].ShapeLetter, amBoxes[i].ShapeLetter);
+            Assert.Equal(cBoxes[i].LeftFrets, amBoxes[i].LeftFrets);
+        }
+
+        // G Major diatonic chords: G, Am, Bm, C, D, Em, F#dim
+        var gDiatonic = MusicTheoryCatalog.GetDiatonicChords(tonicPitch: 7, isMinor: false, preferFlats: false);
+        Assert.Equal(7, gDiatonic.Count);
+        Assert.Equal(["G", "Am", "Bm", "C", "D", "Em", "F#dim"], gDiatonic.Select(d => d.TriadSymbol).ToArray());
+
+        // CAGED 5-shape chord voicings for major/minor/7/maj7/m7: all 5 shapes present, ordered up the neck, 100% valid chord tones
+        int[] openPitches = [4, 9, 2, 7, 11, 4];
+        foreach (var chordSym in new[] { "C", "G", "Am", "Dm", "G7", "Cmaj7", "Am7" })
+        {
+            var voicings = MusicTheoryCatalog.GetCagedChordVoicings(chordSym);
+            var cagedOnes = voicings.Where(v => v.CagedLetter is not null).ToList();
+            Assert.Equal(5, cagedOnes.Count);
+            Assert.True(ChordVoicingEngine.TryParseChord(chordSym, out var parsed));
+
+            foreach (var v in cagedOnes)
+            {
+                for (var s = 0; s < 6; s++)
+                {
+                    if (v.Shape.Frets[s] is not { } f) continue;
+                    var pc = (openPitches[s] + f) % 12;
+                    Assert.Contains(pc, parsed.AllPitches);
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void MusicTheoryCatalog_DecodesChordStringsAndSynthesizesAudioWav()
+    {
+        var std = MusicTheoryCatalog.GetTuning("standard");
+        var cShape = ChordCatalog.ByName("C");
+        Assert.NotNull(cShape);
+
+        var decoded = MusicTheoryCatalog.DecodeChordStrings(cShape!, tonicPitch: 0, std, capo: 0, preferFlats: false);
+        Assert.Equal(6, decoded.Count);
+        Assert.Equal(["×", "C3", "E3", "G3", "C4", "E4"], decoded.Select(d => d.NoteWithOctave).ToArray());
+        Assert.Equal(["—", "R", "3", "5", "R", "3"], decoded.Select(d => d.IntervalLabel).ToArray());
+        Assert.Equal(["—", "1", "3", "5", "1", "3"], decoded.Select(d => d.ScaleDegreeLabel).ToArray());
+
+        // Progression suggestions: smooth voice leading & richer harmony
+        var smooth = MusicTheoryCatalog.SuggestSmootherProgressions(["C", "G", "Am", "F"], preferFlats: false);
+        Assert.NotEmpty(smooth);
+        Assert.Contains(smooth[0].Chords, c => c.Contains('/'));
+
+        var richer = MusicTheoryCatalog.SuggestRicherProgressions(["C", "G", "Am", "F"], tonicPitch: 0, isMinor: false);
+        Assert.NotEmpty(richer);
+        Assert.Equal(4, richer[0].Chords.Count);
+
+        // Karplus-Strong plucked acoustic WAV output header & non-silent payload
+        var wav = GuitarAudioService.SynthesizeMixedNotes([(48, 0, 260), (52, 30, 260), (55, 60, 260)]);
+        Assert.True(wav.Length > 44);
+        Assert.Equal((byte)'R', wav[0]);
+        Assert.Equal((byte)'I', wav[1]);
+        Assert.Equal((byte)'F', wav[2]);
+        Assert.Equal((byte)'F', wav[3]);
+        Assert.Equal((byte)'W', wav[8]);
+        Assert.Equal((byte)'A', wav[9]);
+        Assert.Equal((byte)'V', wav[10]);
+        Assert.Equal((byte)'E', wav[11]);
+    }
+
+    [Fact]
+    public void LibraryStore_PersistsTheoryNotesRoundTrip()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "XianpuTests_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var prevEnv = Environment.GetEnvironmentVariable("XIANPU_DATA_DIR");
+        Environment.SetEnvironmentVariable("XIANPU_DATA_DIR", tempDir);
+        try
+        {
+            var store = new LibraryStore();
+            var lib = new LibraryData();
+            lib.Songs.Add(new SongModel { Title = "测试曲" });
+            lib.TheoryNotes.Add(new TheoryNoteItem
+            {
+                Title = "G 调 E 指型五声连奏",
+                Tag = "CAGED",
+                TonicPitch = 7,
+                ScaleId = "major_pent",
+                ActiveCagedFilter = "E",
+                TuningId = "standard",
+                Capo = 2,
+                HighlightChord = "G",
+                Content = "第 3 品 E 指型接第 5 品 D 指型非常顺手。"
+            });
+
+            store.Save(lib);
+            var reloaded = store.Load();
+            Assert.Single(reloaded.TheoryNotes);
+            var note = reloaded.TheoryNotes[0];
+            Assert.Equal("G 调 E 指型五声连奏", note.Title);
+            Assert.Equal("CAGED", note.Tag);
+            Assert.Equal(7, note.TonicPitch);
+            Assert.Equal("E", note.ActiveCagedFilter);
+            Assert.Equal(2, note.Capo);
+            Assert.Equal("G", note.HighlightChord);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("XIANPU_DATA_DIR", prevEnv);
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
 }

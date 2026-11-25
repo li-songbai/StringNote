@@ -1660,6 +1660,37 @@ public sealed partial class ScoreSurface : FrameworkElement
             var removeItem = new System.Windows.Controls.MenuItem { Header = "删除此和弦" };
             removeItem.Click += (_, _) => RemoveSelectedChord();
             menu.Items.Add(editItem);
+
+            var voicingCandidates = ChordCatalog.GetCandidates(chord.Name);
+            if (voicingCandidates.Count >= 2)
+            {
+                var currentShape = ChordCatalog.ByShapeId(chord.ShapeId) ?? ChordCatalog.ByName(chord.Name);
+                var currentIdx = 0;
+                if (currentShape is not null)
+                {
+                    var found = voicingCandidates
+                        .Select((s, i) => (s, i))
+                        .FirstOrDefault(x => string.Equals(x.s.Id, currentShape.Id, StringComparison.OrdinalIgnoreCase));
+                    if (found.s is not null)
+                        currentIdx = found.i;
+                }
+                var nextIdx = (currentIdx + 1) % voicingCandidates.Count;
+                var nextShape = voicingCandidates[nextIdx];
+
+                var cycleItem = new System.Windows.Controls.MenuItem
+                {
+                    Header = $"↻ 切换指法把位（{currentIdx + 1}/{voicingCandidates.Count} → {nextShape.Label}）"
+                };
+                cycleItem.Click += (_, _) =>
+                {
+                    chord.ShapeId = nextShape.Id;
+                    Changed?.Invoke();
+                    Rebuild();
+                    StatusMessageRequested?.Invoke($"已将「{chord.Name}」切换至第 {nextIdx + 1}/{voicingCandidates.Count} 个把位（{nextShape.Label}）。");
+                };
+                menu.Items.Add(cycleItem);
+            }
+
             menu.Items.Add(removeItem);
 
             var hitLine = Song.Lines[hit.LineIndex];
