@@ -66,7 +66,12 @@ public sealed class TheoryStudioView : UserControl, IDisposable
     private ComboBox _tuningBox = null!;
     private ComboBox _capoBox = null!;
     private readonly Dictionary<FretboardLabelMode, Button> _labelModeBtns = [];
+    private Button _coordCagedBtn = null!;
+    private Button _coord3NpsBtn = null!;
+    private Border _cagedTrackBorder = null!;
+    private Border _threeNpsTrackBorder = null!;
     private readonly Dictionary<string, Button> _cagedFilterBtns = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<int, Button> _threeNpsBtns = [];
     private Button _capsulePillBtn = null!;
     private Button _mapleWoodBtn = null!;
     private Button _roseWoodBtn = null!;
@@ -79,19 +84,37 @@ public sealed class TheoryStudioView : UserControl, IDisposable
     private ScaleDrillStageView _drillStage = null!;
     private int _activeTab;
 
-    // Tab 0: Lessons
+    // Tab 0: Lessons (8 Units · 24 Interactive Practical Guitar Theory Lessons)
+    private TextBlock _lessonProgressText = null!;
+    private ProgressBar _lessonProgressBar = null!;
+    private ComboBox _lessonUnitFilterBox = null!;
+    private string _lessonUnitFilter = "";
     private StackPanel _lessonListPanel = null!;
     private WrapPanel _lessonStepPills = null!;
     private TextBlock _lessonStepCounter = null!;
     private TextBlock _lessonUnitBadge = null!;
+    private Button _lessonMasteredBtn = null!;
     private TextBlock _lessonTitleText = null!;
+    private TextBlock _lessonSummaryText = null!;
     private TextBlock _lessonBodyText = null!;
+    private Border _lessonFormulaCard = null!;
+    private TextBlock _lessonFormulaText = null!;
+    private Border _lessonCompareCard = null!;
+    private WrapPanel _lessonCompareWrap = null!;
+    private TextBlock _lessonCompareHintText = null!;
+    private int _activeCompareIdx = -1;
+    private Border _lessonQuizCard = null!;
+    private TextBlock _lessonQuizPromptText = null!;
+    private Border _lessonQuizFeedbackBorder = null!;
+    private TextBlock _lessonQuizFeedbackText = null!;
+    private bool _quizSolvedInCurrentStep;
     private WrapPanel _lessonScalePillsWrap = null!;
     private StackPanel _lessonCagedSection = null!;
     private WrapPanel _lessonCagedCardsWrap = null!;
+    private WrapPanel _lessonPortalWrap = null!;
     private Button _lessonPrevBtn = null!;
     private Button _lessonNextBtn = null!;
-    private int _activeLessonIndex = 3; // Default directly to CAGED Lesson 1
+    private int _activeLessonIndex; // Start at Lesson 01
     private int _activeStepIndex;
 
     // Tab 1: Chord Anatomy
@@ -170,13 +193,15 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         Background = StudioBg;
         Content = BuildLayout();
 
-        _fretboard.FretClicked += (_, _, midi) =>
+        _fretboard.FretClicked += (stringIdx, fret, midi) =>
         {
             _audio.PlayNote(midi);
             var preferFlats = MusicTheoryCatalog.PreferFlatsForTonic(_fretboard.TonicPitch);
             var note = MusicTheoryCatalog.MidiToNoteWithOctave(midi, preferFlats);
             var deg = MusicTheoryCatalog.GetDegreeLabel(midi % 12, _fretboard.TonicPitch);
-            _setStatus?.Invoke($"指板发声：{note}（当前调内音级：{deg}）");
+            _setStatus?.Invoke($"指板发声：{note}（{6 - stringIdx}弦 {fret}品 · 当前调内音级：{deg}）");
+            if (_activeTab == 0)
+                HandleLessonQuizFretClick(stringIdx, fret, midi);
         };
 
         _fretboard.CagedBadgeClicked += letter =>
@@ -200,6 +225,26 @@ public sealed class TheoryStudioView : UserControl, IDisposable
             }
         };
 
+        _fretboard.ThreeNpsBadgeClicked += npsPos =>
+        {
+            var isAlready = _fretboard.ShowThreeNpsBoxes && _fretboard.ActiveThreeNpsPosition == npsPos;
+            _fretboard.ShowThreeNpsBoxes = true;
+            _fretboard.ActiveThreeNpsPosition = isAlready ? 0 : npsPos;
+            _fretboard.HighlightedChord = null;
+            SyncTopControlsFromFretboard();
+            _fretboard.Refresh();
+
+            if (!isAlready)
+            {
+                PlayAnimatedFretboardSequence();
+                _setStatus?.Invoke($"已聚焦 3NPS（每弦三音）第 {npsPos} 把位（再次点击恢复全部 7 把位）。");
+            }
+            else
+            {
+                _setStatus?.Invoke("已恢复全指板 3NPS 七把位全景。");
+            }
+        };
+
         _progBeatTimer.Tick += OnProgressionBeatTick;
         _noteAutoSaveTimer.Interval = TimeSpan.FromMilliseconds(550);
         _noteAutoSaveTimer.Tick += (_, _) =>
@@ -209,7 +254,7 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         };
 
         SyncTopControlsFromFretboard();
-        LoadLesson(3, 0, applyToFretboard: false);
+        LoadLesson(0, 0, applyToFretboard: false);
         SelectChordBySymbol("C", syncToFretboard: false, autoAudition: false);
         LoadProgressionPreset(MusicTheoryCatalog.ProgressionPresets[0]);
         SwitchTab(0);
@@ -227,11 +272,15 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         _onLibraryMutated = onLibraryMutated;
         _onSongMutated = onSongMutated;
         _setStatus = setStatus;
+        RebuildLessonList();
+        UpdateLessonMasteredButton();
         RefreshNotesList();
     }
 
     public void OnEnteredStudio()
     {
+        RebuildLessonList();
+        UpdateLessonMasteredButton();
         RefreshNotesList();
         SyncWithCurrentSong(silent: true);
     }
@@ -524,11 +573,35 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         }
         wrap.Children.Add(labelSeg);
 
-        // 3. Signature 5-Color CAGED Pill Bar (关 | 全 | C | A | G | E | D)
-        wrap.Children.Add(MakeDockLabel("CAGED"));
-        var cagedTrack = CreateSegmentedContainer();
-        cagedTrack.Margin = new Thickness(0, 2, 8, 2);
-        var cagedStack = (StackPanel)cagedTrack.Child;
+        // 3. Coordinate System Switcher (CAGED | 3NPS) + Dynamic Position Track
+        var coordSeg = CreateSegmentedContainer();
+        coordSeg.Margin = new Thickness(0, 2, 6, 2);
+        var coordStack = (StackPanel)coordSeg.Child;
+        _coordCagedBtn = CreateSegButton("CAGED");
+        _coordCagedBtn.ToolTip = "五把位盒子坐标系（最适合和弦内音定位与弹唱加花）";
+        _coordCagedBtn.Click += (_, _) =>
+        {
+            _fretboard.ShowThreeNpsBoxes = false;
+            _fretboard.ShowCagedBoxes = true;
+            SyncTopControlsFromFretboard();
+            _fretboard.Refresh();
+        };
+        _coord3NpsBtn = CreateSegButton("3NPS");
+        _coord3NpsBtn.ToolTip = "每弦三音斜向七把位坐标系（最适合音阶模进、跨把与高速连奏）";
+        _coord3NpsBtn.Click += (_, _) =>
+        {
+            _fretboard.ShowThreeNpsBoxes = true;
+            _fretboard.ShowCapsules = false;
+            SyncTopControlsFromFretboard();
+            _fretboard.Refresh();
+        };
+        coordStack.Children.Add(_coordCagedBtn);
+        coordStack.Children.Add(_coord3NpsBtn);
+        wrap.Children.Add(coordSeg);
+
+        _cagedTrackBorder = CreateSegmentedContainer();
+        _cagedTrackBorder.Margin = new Thickness(0, 2, 8, 2);
+        var cagedStack = (StackPanel)_cagedTrackBorder.Child;
         (string Code, string Label, string Tip)[] cagedItems =
         [
             ("OFF", "关", "隐藏 CAGED 把位框"),
@@ -546,6 +619,7 @@ public sealed class TheoryStudioView : UserControl, IDisposable
             btn.ToolTip = tip;
             btn.Click += (_, _) =>
             {
+                _fretboard.ShowThreeNpsBoxes = false;
                 if (c == "OFF")
                 {
                     _fretboard.ShowCagedBoxes = false;
@@ -562,7 +636,30 @@ public sealed class TheoryStudioView : UserControl, IDisposable
             _cagedFilterBtns[c] = btn;
             cagedStack.Children.Add(btn);
         }
-        wrap.Children.Add(cagedTrack);
+        wrap.Children.Add(_cagedTrackBorder);
+
+        _threeNpsTrackBorder = CreateSegmentedContainer();
+        _threeNpsTrackBorder.Visibility = Visibility.Collapsed;
+        _threeNpsTrackBorder.Margin = new Thickness(0, 2, 8, 2);
+        var npsStack = (StackPanel)_threeNpsTrackBorder.Child;
+        for (var p = 0; p <= 7; p++)
+        {
+            var posNum = p;
+            var lbl = posNum == 0 ? "全" : $"{posNum}把";
+            var nb = CreateSegButton(lbl, minWidth: 26);
+            nb.ToolTip = posNum == 0 ? "显示全部 7 个每弦三音把位" : $"聚焦 3NPS 第 {posNum} 把位";
+            nb.Click += (_, _) =>
+            {
+                _fretboard.ShowThreeNpsBoxes = true;
+                _fretboard.ActiveThreeNpsPosition = posNum;
+                _fretboard.HighlightedChord = null;
+                SyncTopControlsFromFretboard();
+                _fretboard.Refresh();
+            };
+            _threeNpsBtns[posNum] = nb;
+            npsStack.Children.Add(nb);
+        }
+        wrap.Children.Add(_threeNpsTrackBorder);
 
         _capsulePillBtn = CreatePillButton("双音胶囊", isPrimary: false, toolTip: "用柔和胶囊圈出每根弦上的五声音阶双音对");
         _capsulePillBtn.Padding = new Thickness(9, 3, 9, 3);
@@ -619,16 +716,74 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         return dock;
     }
 
-    // ─── Tab 0: Interactive Theory & CAGED Micro-Lessons ──────────────────────────────
+    // ─── Tab 0: Interactive Theory & CAGED Academy (8 Units · 24 Lessons) ───────────
 
     private UIElement BuildLessonsTab()
     {
         var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(256) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(288) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(16) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        // Left: Frameless Syllabus Rail
+        // Left: Course Progress Header + Unit Filter + 24-Lesson Syllabus Rail
+        var leftGrid = new Grid();
+        leftGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        leftGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+
+        var progCard = new Border
+        {
+            Background = WarmPaperBg,
+            BorderBrush = WarmPaperBorder,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(10, 8, 10, 8),
+            Margin = new Thickness(0, 0, 0, 8)
+        };
+        var progStack = new StackPanel();
+        _lessonProgressText = new TextBlock
+        {
+            Text = "🎓 吉他实用乐理全课 · 已掌握 0 / 24 课",
+            FontSize = 11.5,
+            FontWeight = FontWeights.Bold,
+            Foreground = AppDialogs.AccentHoverBrush,
+            Margin = new Thickness(0, 0, 0, 5)
+        };
+        progStack.Children.Add(_lessonProgressText);
+
+        _lessonProgressBar = new ProgressBar
+        {
+            Minimum = 0,
+            Maximum = Math.Max(1, MusicTheoryCatalog.Lessons.Count),
+            Value = 0,
+            Height = 5,
+            Foreground = AppDialogs.AccentBrush,
+            Background = new SolidColorBrush(Color.FromRgb(226, 232, 240)),
+            BorderThickness = new Thickness(0),
+            Margin = new Thickness(0, 0, 0, 7)
+        };
+        progStack.Children.Add(_lessonProgressBar);
+
+        _lessonUnitFilterBox = new ComboBox { Height = 25, FontSize = 11.5 };
+        _lessonUnitFilterBox.Items.Add(new ComboBoxItem { Content = $"全部 8 大单元（共 {MusicTheoryCatalog.Lessons.Count} 课）", Tag = "" });
+        foreach (var unit in MusicTheoryCatalog.Lessons.Select(l => l.UnitName).Distinct())
+        {
+            var cnt = MusicTheoryCatalog.Lessons.Count(l => l.UnitName == unit);
+            _lessonUnitFilterBox.Items.Add(new ComboBoxItem { Content = $"{unit}（{cnt}课）", Tag = unit });
+        }
+        _lessonUnitFilterBox.SelectedIndex = 0;
+        _lessonUnitFilterBox.SelectionChanged += (_, _) =>
+        {
+            if (_lessonUnitFilterBox.SelectedItem is ComboBoxItem { Tag: string u })
+            {
+                _lessonUnitFilter = u;
+                RebuildLessonList();
+            }
+        };
+        progStack.Children.Add(_lessonUnitFilterBox);
+        progCard.Child = progStack;
+        Grid.SetRow(progCard, 0);
+        leftGrid.Children.Add(progCard);
+
         _lessonListPanel = new StackPanel();
         var listScroll = new ScrollViewer
         {
@@ -639,45 +794,59 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         var listPanel = new Border
         {
             Background = SoftSurface,
+            BorderBrush = CardBorder,
+            BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(10),
-            Padding = new Thickness(8, 8, 8, 8),
+            Padding = new Thickness(7, 7, 7, 7),
             Child = listScroll
         };
-        Grid.SetColumn(listPanel, 0);
-        grid.Children.Add(listPanel);
+        Grid.SetRow(listPanel, 1);
+        leftGrid.Children.Add(listPanel);
 
-        // Right: Warm Editorial Lesson Card
+        Grid.SetColumn(leftGrid, 0);
+        grid.Children.Add(leftGrid);
+
+        // Right: Warm Editorial Interactive Lesson Stage
         var rightCard = new Border
         {
             Background = WarmPaperBg,
             BorderBrush = WarmPaperBorder,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(12),
-            Padding = new Thickness(22, 16, 22, 16)
+            Padding = new Thickness(20, 14, 20, 14)
         };
         var rightGrid = new Grid();
-        rightGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Unit + Step counter
+        rightGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Meta + Mastery pill
         rightGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Step pills
-        rightGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Title
-        rightGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Body
-        rightGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Action bar
+        rightGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Title + Summary
+        rightGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Rich Interactive Body
+        rightGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Action & Portal bar
 
         var metaRow = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
+        var rightMetaStack = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         _lessonStepCounter = new TextBlock
         {
             FontSize = 11.5,
             FontWeight = FontWeights.SemiBold,
-            Foreground = AppDialogs.AccentHoverBrush,
-            VerticalAlignment = VerticalAlignment.Center
+            Foreground = AppDialogs.MutedBrush,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0)
         };
-        DockPanel.SetDock(_lessonStepCounter, Dock.Right);
-        metaRow.Children.Add(_lessonStepCounter);
+        rightMetaStack.Children.Add(_lessonStepCounter);
+
+        _lessonMasteredBtn = CreatePillButton("○ 标记已掌握", isPrimary: false, toolTip: "手动标记或通过指板随堂闯关自动点亮已掌握进度");
+        _lessonMasteredBtn.FontSize = 11;
+        _lessonMasteredBtn.Padding = new Thickness(9, 2.5, 9, 2.5);
+        _lessonMasteredBtn.Click += (_, _) => ToggleCurrentLessonMastered();
+        rightMetaStack.Children.Add(_lessonMasteredBtn);
+        DockPanel.SetDock(rightMetaStack, Dock.Right);
+        metaRow.Children.Add(rightMetaStack);
 
         var unitPill = new Border
         {
             Background = AppDialogs.AccentLightBrush,
             CornerRadius = new CornerRadius(10),
-            Padding = new Thickness(9, 2, 9, 2),
+            Padding = new Thickness(9, 2.5, 9, 2.5),
             HorizontalAlignment = HorizontalAlignment.Left
         };
         _lessonUnitBadge = new TextBlock { FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = AppDialogs.AccentHoverBrush };
@@ -686,20 +855,29 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         Grid.SetRow(metaRow, 0);
         rightGrid.Children.Add(metaRow);
 
-        _lessonStepPills = new WrapPanel { Margin = new Thickness(0, 0, 0, 10) };
+        _lessonStepPills = new WrapPanel { Margin = new Thickness(0, 0, 0, 8) };
         Grid.SetRow(_lessonStepPills, 1);
         rightGrid.Children.Add(_lessonStepPills);
 
+        var titleStack = new StackPanel { Margin = new Thickness(0, 0, 0, 10) };
         _lessonTitleText = new TextBlock
         {
-            FontSize = 17.5,
+            FontSize = 17,
             FontWeight = FontWeights.Bold,
             Foreground = AppDialogs.TitleBrush,
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 10)
+            TextWrapping = TextWrapping.Wrap
         };
-        Grid.SetRow(_lessonTitleText, 2);
-        rightGrid.Children.Add(_lessonTitleText);
+        _lessonSummaryText = new TextBlock
+        {
+            FontSize = 12,
+            Foreground = AppDialogs.MutedBrush,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 3, 0, 0)
+        };
+        titleStack.Children.Add(_lessonTitleText);
+        titleStack.Children.Add(_lessonSummaryText);
+        Grid.SetRow(titleStack, 2);
+        rightGrid.Children.Add(titleStack);
 
         var bodyStack = new StackPanel();
         _lessonBodyText = new TextBlock
@@ -707,19 +885,143 @@ public sealed class TheoryStudioView : UserControl, IDisposable
             FontSize = 13.5,
             Foreground = new SolidColorBrush(Color.FromRgb(51, 65, 85)),
             TextWrapping = TextWrapping.Wrap,
-            LineHeight = 25,
-            Margin = new Thickness(0, 0, 0, 14)
+            LineHeight = 24,
+            Margin = new Thickness(0, 0, 0, 12)
         };
         bodyStack.Children.Add(_lessonBodyText);
 
-        // Interactive Scale Formula Pills (Click any degree -> flashes all occurrences on fretboard & plays note!)
+        // 1. Key Formula / Mnemonic Callout Card
+        _lessonFormulaCard = new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(238, 247, 241)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(47, 107, 72)),
+            BorderThickness = new Thickness(4, 1, 1, 1),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(12, 8, 12, 8),
+            Margin = new Thickness(0, 0, 0, 10),
+            Visibility = Visibility.Collapsed
+        };
+        var formulaStack = new StackPanel();
+        formulaStack.Children.Add(new TextBlock
+        {
+            Text = "📌 核心口诀与推导公式",
+            FontSize = 11,
+            FontWeight = FontWeights.Bold,
+            Foreground = AppDialogs.AccentHoverBrush,
+            Margin = new Thickness(0, 0, 0, 3)
+        });
+        _lessonFormulaText = new TextBlock
+        {
+            FontSize = 12.5,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = AppDialogs.TitleBrush,
+            TextWrapping = TextWrapping.Wrap,
+            LineHeight = 20
+        };
+        formulaStack.Children.Add(_lessonFormulaText);
+        _lessonFormulaCard.Child = formulaStack;
+        bodyStack.Children.Add(_lessonFormulaCard);
+
+        // 2. Interactive AB Ear-Comparison Bench
+        _lessonCompareCard = new Border
+        {
+            Background = Brushes.White,
+            BorderBrush = new SolidColorBrush(Color.FromRgb(191, 219, 254)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(12, 9, 12, 9),
+            Margin = new Thickness(0, 0, 0, 10),
+            Visibility = Visibility.Collapsed
+        };
+        var cmpStack = new StackPanel();
+        cmpStack.Children.Add(new TextBlock
+        {
+            Text = "🎧 AB 听感对比试验台 · 点击任意胶囊，上方指板同步变形并试听差异",
+            FontSize = 11,
+            FontWeight = FontWeights.Bold,
+            Foreground = new SolidColorBrush(Color.FromRgb(29, 78, 216)),
+            Margin = new Thickness(0, 0, 0, 6)
+        });
+        _lessonCompareWrap = new WrapPanel();
+        cmpStack.Children.Add(_lessonCompareWrap);
+        _lessonCompareHintText = new TextBlock
+        {
+            FontSize = 12,
+            Foreground = AppDialogs.BodyBrush,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(2, 4, 0, 0),
+            Visibility = Visibility.Collapsed
+        };
+        cmpStack.Children.Add(_lessonCompareHintText);
+        _lessonCompareCard.Child = cmpStack;
+        bodyStack.Children.Add(_lessonCompareCard);
+
+        // 3. Interactive Fretboard Point-and-Click Quiz Card
+        _lessonQuizCard = new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(255, 251, 235)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(245, 158, 11)),
+            BorderThickness = new Thickness(4, 1, 1, 1),
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(12, 9, 12, 9),
+            Margin = new Thickness(0, 0, 0, 10),
+            Visibility = Visibility.Collapsed
+        };
+        var quizStack = new StackPanel();
+        var quizHead = new DockPanel { Margin = new Thickness(0, 0, 0, 4) };
+        var hintBtn = CreatePillButton("💡 闪烁提示", isPrimary: false, toolTip: "在上方指板短暂闪烁目标音位置");
+        hintBtn.FontSize = 10.5;
+        hintBtn.Padding = new Thickness(8, 2, 8, 2);
+        hintBtn.Click += (_, _) => FlashCurrentLessonQuizHint();
+        DockPanel.SetDock(hintBtn, Dock.Right);
+        quizHead.Children.Add(hintBtn);
+        quizHead.Children.Add(new TextBlock
+        {
+            Text = "🎯 随堂指板点按闯关（直接在上方全景指板点击对应品格验证）",
+            FontSize = 11,
+            FontWeight = FontWeights.Bold,
+            Foreground = new SolidColorBrush(Color.FromRgb(180, 83, 9)),
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        quizStack.Children.Add(quizHead);
+
+        _lessonQuizPromptText = new TextBlock
+        {
+            FontSize = 12.5,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = AppDialogs.TitleBrush,
+            TextWrapping = TextWrapping.Wrap,
+            LineHeight = 20,
+            Margin = new Thickness(0, 0, 0, 6)
+        };
+        quizStack.Children.Add(_lessonQuizPromptText);
+
+        _lessonQuizFeedbackBorder = new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(254, 243, 199)),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(9, 5, 9, 5)
+        };
+        _lessonQuizFeedbackText = new TextBlock
+        {
+            Text = "👆 请点击上方全景指板中的目标音品格作答…",
+            FontSize = 11.5,
+            Foreground = new SolidColorBrush(Color.FromRgb(146, 64, 14)),
+            TextWrapping = TextWrapping.Wrap
+        };
+        _lessonQuizFeedbackBorder.Child = _lessonQuizFeedbackText;
+        quizStack.Children.Add(_lessonQuizFeedbackBorder);
+        _lessonQuizCard.Child = quizStack;
+        bodyStack.Children.Add(_lessonQuizCard);
+
+        // 4. Interactive Scale Formula Pills (Click any degree -> flashes all occurrences on fretboard & plays note!)
         var scaleFormulaCard = new Border
         {
             Background = Brushes.White,
             BorderBrush = CardBorder,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(10),
-            Padding = new Thickness(12, 9, 12, 9),
+            Padding = new Thickness(12, 8, 12, 8),
             Margin = new Thickness(0, 0, 0, 10)
         };
         var scaleFormulaStack = new StackPanel();
@@ -736,7 +1038,7 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         scaleFormulaCard.Child = scaleFormulaStack;
         bodyStack.Children.Add(scaleFormulaCard);
 
-        // Interactive CAGED 5-Box Quick-Jump Cards
+        // 5. Interactive CAGED 5-Box Quick-Jump Cards
         _lessonCagedSection = new StackPanel();
         _lessonCagedSection.Children.Add(new TextBlock
         {
@@ -758,20 +1060,8 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         Grid.SetRow(bodyScroll, 3);
         rightGrid.Children.Add(bodyScroll);
 
-        var bottomBar = new DockPanel { Margin = new Thickness(0, 14, 0, 0) };
-        var leftDemoBtns = new StackPanel { Orientation = Orientation.Horizontal };
-        var playShapeBtn = CreatePillButton("▶ 动画弹这个形状", isPrimary: true, toolTip: "逐音拨弦试听，上方指板同步点亮对应圆点");
-        playShapeBtn.Margin = new Thickness(0, 0, 8, 0);
-        playShapeBtn.Click += (_, _) => PlayAnimatedFretboardSequence();
-
-        var playChordBtn = CreatePillButton("▶ 听里面的和弦", isPrimary: false, toolTip: "扫弦试听藏在当前指型里的核心和弦");
-        playChordBtn.Click += (_, _) => PlayAnimatedFretboardTriad();
-
-        leftDemoBtns.Children.Add(playShapeBtn);
-        leftDemoBtns.Children.Add(playChordBtn);
-        bottomBar.Children.Add(leftDemoBtns);
-
-        var navBtns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        var bottomBar = new DockPanel { Margin = new Thickness(0, 12, 0, 0) };
+        var navBtns = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         _lessonPrevBtn = CreatePillButton("← 上一步", isPrimary: false);
         _lessonPrevBtn.Margin = new Thickness(0, 0, 8, 0);
         _lessonPrevBtn.Click += (_, _) => StepLesson(-1);
@@ -783,6 +1073,21 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         navBtns.Children.Add(_lessonNextBtn);
         DockPanel.SetDock(navBtns, Dock.Right);
         bottomBar.Children.Add(navBtns);
+
+        var leftDemoWrap = new WrapPanel { VerticalAlignment = VerticalAlignment.Center };
+        var playShapeBtn = CreatePillButton("▶ 动画弹音阶", isPrimary: true, toolTip: "逐音拨弦试听当前把位/音阶，上方指板同步点亮对应圆点");
+        playShapeBtn.Margin = new Thickness(0, 2, 6, 2);
+        playShapeBtn.Click += (_, _) => PlayAnimatedFretboardSequence();
+
+        var playChordBtn = CreatePillButton("▶ 听核心和弦", isPrimary: false, toolTip: "扫弦试听藏在当前把位里的核心和弦");
+        playChordBtn.Margin = new Thickness(0, 2, 8, 2);
+        playChordBtn.Click += (_, _) => PlayAnimatedFretboardTriad();
+
+        _lessonPortalWrap = new WrapPanel { VerticalAlignment = VerticalAlignment.Center };
+        leftDemoWrap.Children.Add(playShapeBtn);
+        leftDemoWrap.Children.Add(playChordBtn);
+        leftDemoWrap.Children.Add(_lessonPortalWrap);
+        bottomBar.Children.Add(leftDemoWrap);
 
         Grid.SetRow(bottomBar, 4);
         rightGrid.Children.Add(bottomBar);
@@ -1655,6 +1960,16 @@ public sealed class TheoryStudioView : UserControl, IDisposable
 
     private void UpdateCagedChipStyles()
     {
+        var is3Nps = _fretboard.ShowThreeNpsBoxes;
+        StyleSegButton(_coordCagedBtn, !is3Nps);
+        StyleSegButton(_coord3NpsBtn, is3Nps);
+        _cagedTrackBorder.Visibility = is3Nps ? Visibility.Collapsed : Visibility.Visible;
+        _threeNpsTrackBorder.Visibility = is3Nps ? Visibility.Visible : Visibility.Collapsed;
+        _capsulePillBtn.Visibility = is3Nps ? Visibility.Collapsed : Visibility.Visible;
+
+        foreach (var (posNum, nb) in _threeNpsBtns)
+            StyleSegButton(nb, is3Nps && _fretboard.ActiveThreeNpsPosition == posNum);
+
         var activeCode = !_fretboard.ShowCagedBoxes
             ? "OFF"
             : (string.IsNullOrWhiteSpace(_fretboard.ActiveCagedFilter) ? "ALL" : _fretboard.ActiveCagedFilter);
@@ -1692,7 +2007,9 @@ public sealed class TheoryStudioView : UserControl, IDisposable
 
         var subParts = new List<string>();
         if (_fretboard.Capo > 0) subParts.Add($"Capo {_fretboard.Capo}");
-        if (_fretboard.ShowCagedBoxes)
+        if (_fretboard.ShowThreeNpsBoxes)
+            subParts.Add(_fretboard.ActiveThreeNpsPosition == 0 ? "3NPS 每弦三音全 7 把位" : $"3NPS 第 {_fretboard.ActiveThreeNpsPosition} 把位");
+        else if (_fretboard.ShowCagedBoxes)
             subParts.Add(_fretboard.ActiveCagedFilter == "ALL" ? "CAGED 全指板（点顶标可聚焦）" : $"聚焦 {_fretboard.ActiveCagedFilter} 形");
         if (_fretboard.HighlightedChord is not null)
             subParts.Add($"和弦 {_fretboard.HighlightedChord.Name}");
@@ -1740,78 +2057,166 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         _legendPanel.Children.Add(txt);
     }
 
-    // ─── Lessons Logic ────────────────────────────────────────────────────────────────
+    // ─── Lessons Logic (Syllabus, AB Ear Bench, Fretboard Quiz & Portals) ──────────────
+
+    private HashSet<string> GetCompletedLessonSet()
+    {
+        var list = _getLibrary?.Invoke()?.CompletedTheoryLessons;
+        return list is null
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(list, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void MarkLessonCompleted(string lessonId, bool completed)
+    {
+        var lib = _getLibrary?.Invoke();
+        if (lib is null) return;
+        lib.CompletedTheoryLessons ??= [];
+        var existingIdx = lib.CompletedTheoryLessons.FindIndex(x => string.Equals(x, lessonId, StringComparison.OrdinalIgnoreCase));
+        if (completed && existingIdx < 0)
+        {
+            lib.CompletedTheoryLessons.Add(lessonId);
+            _onLibraryMutated?.Invoke();
+        }
+        else if (!completed && existingIdx >= 0)
+        {
+            lib.CompletedTheoryLessons.RemoveAt(existingIdx);
+            _onLibraryMutated?.Invoke();
+        }
+        RebuildLessonList();
+        UpdateLessonMasteredButton();
+    }
+
+    private void ToggleCurrentLessonMastered()
+    {
+        var lesson = MusicTheoryCatalog.Lessons[_activeLessonIndex];
+        var done = GetCompletedLessonSet().Contains(lesson.Id);
+        MarkLessonCompleted(lesson.Id, !done);
+        _setStatus?.Invoke(!done
+            ? $"已标记《{lesson.CodeBadge} {lesson.Title}》为已掌握！"
+            : $"已取消《{lesson.CodeBadge} {lesson.Title}》的已掌握标记。");
+    }
+
+    private void UpdateLessonMasteredButton()
+    {
+        if (_lessonMasteredBtn is null) return;
+        var lesson = MusicTheoryCatalog.Lessons[Math.Clamp(_activeLessonIndex, 0, MusicTheoryCatalog.Lessons.Count - 1)];
+        var isDone = GetCompletedLessonSet().Contains(lesson.Id);
+        _lessonMasteredBtn.Content = isDone ? "✓ 已掌握" : "○ 标记已掌握";
+        StyleTogglePill(_lessonMasteredBtn, isDone);
+    }
 
     private void RebuildLessonList()
     {
+        if (_lessonListPanel is null) return;
         _lessonListPanel.Children.Clear();
+
+        var completedSet = GetCompletedLessonSet();
+        var totalCount = MusicTheoryCatalog.Lessons.Count;
+        var doneCount = MusicTheoryCatalog.Lessons.Count(l => completedSet.Contains(l.Id));
+        if (_lessonProgressText is not null)
+            _lessonProgressText.Text = $"🎓 实用乐理实战课 · 已掌握 {doneCount} / {totalCount} 课";
+        if (_lessonProgressBar is not null)
+        {
+            _lessonProgressBar.Maximum = Math.Max(1, totalCount);
+            _lessonProgressBar.Value = doneCount;
+        }
+
         string? lastUnit = null;
         for (var i = 0; i < MusicTheoryCatalog.Lessons.Count; i++)
         {
             var lesson = MusicTheoryCatalog.Lessons[i];
+            if (!string.IsNullOrEmpty(_lessonUnitFilter) && !string.Equals(lesson.UnitName, _lessonUnitFilter, StringComparison.Ordinal))
+                continue;
+
             if (lesson.UnitName != lastUnit)
             {
                 lastUnit = lesson.UnitName;
                 _lessonListPanel.Children.Add(new TextBlock
                 {
-                    Text = lesson.UnitName.ToUpperInvariant(),
+                    Text = lesson.UnitName,
                     FontSize = 10.5,
                     FontWeight = FontWeights.Bold,
                     Foreground = AppDialogs.AccentHoverBrush,
-                    Margin = new Thickness(8, i == 0 ? 2 : 10, 6, 4)
+                    Margin = new Thickness(6, _lessonListPanel.Children.Count == 0 ? 2 : 10, 4, 4)
                 });
             }
 
             var idx = i;
             var isSel = idx == _activeLessonIndex;
+            var isDone = completedSet.Contains(lesson.Id);
+
             var itemBorder = new Border
             {
                 Background = isSel ? Brushes.White : Brushes.Transparent,
-                BorderBrush = isSel ? CardBorder : Brushes.Transparent,
-                BorderThickness = new Thickness(1),
+                BorderBrush = isSel ? AppDialogs.AccentBrush : Brushes.Transparent,
+                BorderThickness = new Thickness(isSel ? 1.4 : 1),
                 CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(6, 5, 6, 5),
                 Margin = new Thickness(0, 1, 0, 2),
-                Cursor = Cursors.Hand
+                Cursor = Cursors.Hand,
+                ToolTip = $"{lesson.CodeBadge} · {lesson.Title}\n{lesson.Summary}"
             };
 
-            var rowGrid = new Grid();
-            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(3.5) });
-            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            var bar = new Border
+            var dock = new DockPanel();
+            var rightBadge = new TextBlock
             {
-                Background = isSel ? AppDialogs.AccentBrush : Brushes.Transparent,
-                CornerRadius = new CornerRadius(2),
-                Margin = new Thickness(0, 5, 0, 5)
+                Text = isDone ? "✓" : $"{lesson.Steps.Count}步",
+                FontSize = isDone ? 11 : 9.5,
+                FontWeight = isDone ? FontWeights.Bold : FontWeights.Normal,
+                Foreground = isDone ? AppDialogs.AccentHoverBrush : AppDialogs.MutedBrush,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(4, 2, 2, 0)
             };
-            Grid.SetColumn(bar, 0);
-            rowGrid.Children.Add(bar);
+            DockPanel.SetDock(rightBadge, Dock.Right);
+            dock.Children.Add(rightBadge);
 
-            var titleTb = new TextBlock
+            var codePill = new Border
+            {
+                Background = isSel
+                    ? AppDialogs.AccentBrush
+                    : (isDone ? AppDialogs.AccentLightBrush : new SolidColorBrush(Color.FromRgb(226, 232, 240))),
+                CornerRadius = new CornerRadius(5),
+                Width = 24,
+                Height = 17,
+                Margin = new Thickness(0, 1, 7, 0),
+                VerticalAlignment = VerticalAlignment.Top,
+                Child = new TextBlock
+                {
+                    Text = lesson.CodeBadge,
+                    FontSize = 9.5,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = isSel ? Brushes.White : (isDone ? AppDialogs.AccentHoverBrush : AppDialogs.BodyBrush),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                }
+            };
+            DockPanel.SetDock(codePill, Dock.Left);
+            dock.Children.Add(codePill);
+
+            var textCol = new StackPanel();
+            textCol.Children.Add(new TextBlock
             {
                 Text = lesson.Title,
-                FontSize = 12,
+                FontSize = 11.5,
                 FontWeight = isSel ? FontWeights.Bold : FontWeights.Normal,
                 Foreground = isSel ? AppDialogs.TitleBrush : AppDialogs.BodyBrush,
-                Padding = new Thickness(8, 7, 4, 7),
                 TextTrimming = TextTrimming.CharacterEllipsis
-            };
-            Grid.SetColumn(titleTb, 1);
-            rowGrid.Children.Add(titleTb);
-
-            var countBadge = new TextBlock
+            });
+            if (isSel)
             {
-                Text = $"{lesson.Steps.Count}步",
-                FontSize = 10,
-                Foreground = AppDialogs.MutedBrush,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 8, 0)
-            };
-            Grid.SetColumn(countBadge, 2);
-            rowGrid.Children.Add(countBadge);
+                textCol.Children.Add(new TextBlock
+                {
+                    Text = lesson.Summary,
+                    FontSize = 10,
+                    Foreground = AppDialogs.MutedBrush,
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(0, 2, 0, 0)
+                });
+            }
+            dock.Children.Add(textCol);
 
-            itemBorder.Child = rowGrid;
+            itemBorder.Child = dock;
             itemBorder.MouseLeftButtonDown += (_, _) => LoadLesson(idx, 0, applyToFretboard: true);
             _lessonListPanel.Children.Add(itemBorder);
         }
@@ -1824,17 +2229,37 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         _activeStepIndex = Math.Clamp(stepIdx, 0, lesson.Steps.Count - 1);
         var step = lesson.Steps[_activeStepIndex];
 
-        _lessonUnitBadge.Text = lesson.UnitName;
-        _lessonStepCounter.Text = $"第 {_activeStepIndex + 1} 步 / 共 {lesson.Steps.Count} 步";
-        _lessonTitleText.Text = $"{lesson.Title} · {step.StepTitle}";
+        _activeCompareIdx = -1;
+        _quizSolvedInCurrentStep = false;
+
+        _lessonUnitBadge.Text = $"{lesson.UnitName} · 第 {lesson.CodeBadge} 课";
+        _lessonStepCounter.Text = $"步骤 {_activeStepIndex + 1} / {lesson.Steps.Count}";
+        _lessonTitleText.Text = $"{lesson.CodeBadge}. {lesson.Title} — {step.StepTitle}";
+        _lessonSummaryText.Text = lesson.Summary;
         _lessonBodyText.Text = step.Body;
+
+        if (!string.IsNullOrWhiteSpace(step.KeyFormula))
+        {
+            _lessonFormulaCard.Visibility = Visibility.Visible;
+            _lessonFormulaText.Text = step.KeyFormula;
+        }
+        else
+        {
+            _lessonFormulaCard.Visibility = Visibility.Collapsed;
+        }
+
+        RebuildLessonCompareBench(step);
+        RebuildLessonQuizCard(step);
+        RebuildLessonPortals(lesson);
+        UpdateLessonMasteredButton();
 
         _lessonStepPills.Children.Clear();
         for (var i = 0; i < lesson.Steps.Count; i++)
         {
             var si = i;
             var isCurrent = i == _activeStepIndex;
-            var pill = CreatePillButton($"{i + 1}. {lesson.Steps[i].StepTitle}", isPrimary: isCurrent);
+            var hasQuizTag = lesson.Steps[i].Quiz is not null ? " 🎯" : "";
+            var pill = CreatePillButton($"{i + 1}. {lesson.Steps[i].StepTitle}{hasQuizTag}", isPrimary: isCurrent);
             pill.FontSize = 11;
             pill.Padding = new Thickness(9, 3, 9, 3);
             pill.Margin = new Thickness(0, 0, 6, 4);
@@ -1843,10 +2268,11 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         }
 
         _lessonPrevBtn.IsEnabled = _activeLessonIndex > 0 || _activeStepIndex > 0;
-        _lessonNextBtn.Content = (_activeStepIndex == lesson.Steps.Count - 1 && _activeLessonIndex < MusicTheoryCatalog.Lessons.Count - 1)
-            ? "进入下一课 →"
+        var isLastStep = _activeStepIndex == lesson.Steps.Count - 1;
+        _lessonNextBtn.Content = isLastStep
+            ? (_activeLessonIndex < MusicTheoryCatalog.Lessons.Count - 1 ? "✓ 学完进入下一课 →" : "✓ 完成全套课程")
             : "下一步 →";
-        _lessonNextBtn.IsEnabled = _activeLessonIndex < MusicTheoryCatalog.Lessons.Count - 1 || _activeStepIndex < lesson.Steps.Count - 1;
+        _lessonNextBtn.IsEnabled = true;
 
         RebuildLessonList();
 
@@ -1856,9 +2282,13 @@ public sealed class TheoryStudioView : UserControl, IDisposable
             _fretboard.Scale = MusicTheoryCatalog.GetScale(step.ScaleId);
             _fretboard.Tuning = MusicTheoryCatalog.GetTuning(step.TuningId);
             _fretboard.Capo = step.Capo;
-            _fretboard.ShowCagedBoxes = step.ShowCaged;
+            if (step.PreferredLabelMode is { } prefLabel)
+                _fretboard.LabelMode = prefLabel;
+            _fretboard.ShowThreeNpsBoxes = step.ShowThreeNps;
+            _fretboard.ActiveThreeNpsPosition = step.ThreeNpsPos;
+            _fretboard.ShowCagedBoxes = !step.ShowThreeNps && step.ShowCaged;
             _fretboard.ActiveCagedFilter = string.IsNullOrEmpty(step.CagedFilter) ? "ALL" : step.CagedFilter;
-            _fretboard.ShowCapsules = step.ShowCapsules;
+            _fretboard.ShowCapsules = !step.ShowThreeNps && step.ShowCapsules;
             _fretboard.JamTargetColorMode = false;
             _fretboard.HighlightedChord = string.IsNullOrWhiteSpace(step.HighlightChord)
                 ? null
@@ -1868,6 +2298,240 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         }
 
         RebuildLessonPracticePanels();
+    }
+
+    private void RebuildLessonCompareBench(TheoryLessonStep step)
+    {
+        if (_lessonCompareCard is null) return;
+        _lessonCompareWrap.Children.Clear();
+        if (step.CompareItems is not { Count: > 0 } items)
+        {
+            _lessonCompareCard.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        _lessonCompareCard.Visibility = Visibility.Visible;
+        _lessonCompareHintText.Visibility = Visibility.Collapsed;
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            var idx = i;
+            var opt = items[i];
+            var isSel = idx == _activeCompareIdx;
+            var btn = CreatePillButton($"🔊 {opt.Label}", isPrimary: isSel);
+            btn.FontSize = 11.5;
+            btn.Padding = new Thickness(10, 4, 10, 4);
+            btn.Margin = new Thickness(0, 2, 7, 4);
+            btn.Click += (_, _) =>
+            {
+                _activeCompareIdx = idx;
+                _lessonCompareHintText.Text = $"👂 听感解析：{opt.Hint}";
+                _lessonCompareHintText.Visibility = Visibility.Visible;
+
+                if (opt.TonicPitch.HasValue)
+                    _fretboard.TonicPitch = opt.TonicPitch.Value;
+                if (!string.IsNullOrWhiteSpace(opt.ScaleId))
+                    _fretboard.Scale = MusicTheoryCatalog.GetScale(opt.ScaleId);
+
+                if (!string.IsNullOrWhiteSpace(opt.ChordSymbol))
+                {
+                    var shape = ChordCatalog.ByName(opt.ChordSymbol);
+                    _fretboard.HighlightedChord = shape;
+                    SyncTopControlsFromFretboard();
+                    _fretboard.Refresh();
+                    if (shape is not null)
+                    {
+                        var midiNotes = MusicTheoryCatalog.GetChordMidiNotes(shape, _fretboard.Tuning, _fretboard.Capo);
+                        _audio.PlayChord(midiNotes, arpeggio: false);
+                        _fretboard.FlashChordShape(shape, arpeggio: false);
+                    }
+                }
+                else
+                {
+                    _fretboard.HighlightedChord = null;
+                    SyncTopControlsFromFretboard();
+                    _fretboard.Refresh();
+                    PlayAnimatedFretboardSequence();
+                }
+
+                // Refresh button highlight states while keeping hint visible
+                var savedHint = _lessonCompareHintText.Text;
+                RebuildLessonCompareBench(step);
+                _lessonCompareHintText.Text = savedHint;
+                _lessonCompareHintText.Visibility = Visibility.Visible;
+            };
+            _lessonCompareWrap.Children.Add(btn);
+        }
+    }
+
+    private void RebuildLessonQuizCard(TheoryLessonStep step)
+    {
+        if (_lessonQuizCard is null) return;
+        if (step.Quiz is not { } quiz)
+        {
+            _lessonQuizCard.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        _lessonQuizCard.Visibility = Visibility.Visible;
+        _lessonQuizPromptText.Text = quiz.Prompt;
+        SetQuizVisualState(solved: false, feedback: "👆 请直接在上方全景指板中点击对应品格验证答案…", isError: false);
+    }
+
+    private void SetQuizVisualState(bool solved, string feedback, bool isError)
+    {
+        if (_lessonQuizCard is null) return;
+        if (solved)
+        {
+            _lessonQuizCard.Background = new SolidColorBrush(Color.FromRgb(236, 253, 245));
+            _lessonQuizCard.BorderBrush = AppDialogs.AccentBrush;
+            _lessonQuizFeedbackBorder.Background = new SolidColorBrush(Color.FromRgb(209, 250, 229));
+            _lessonQuizFeedbackText.Foreground = AppDialogs.AccentHoverBrush;
+            _lessonQuizFeedbackText.FontWeight = FontWeights.SemiBold;
+        }
+        else if (isError)
+        {
+            _lessonQuizCard.Background = new SolidColorBrush(Color.FromRgb(255, 251, 235));
+            _lessonQuizCard.BorderBrush = new SolidColorBrush(Color.FromRgb(217, 119, 6));
+            _lessonQuizFeedbackBorder.Background = new SolidColorBrush(Color.FromRgb(254, 243, 199));
+            _lessonQuizFeedbackText.Foreground = new SolidColorBrush(Color.FromRgb(180, 83, 9));
+            _lessonQuizFeedbackText.FontWeight = FontWeights.Normal;
+        }
+        else
+        {
+            _lessonQuizCard.Background = new SolidColorBrush(Color.FromRgb(255, 251, 235));
+            _lessonQuizCard.BorderBrush = new SolidColorBrush(Color.FromRgb(245, 158, 11));
+            _lessonQuizFeedbackBorder.Background = new SolidColorBrush(Color.FromRgb(254, 243, 199));
+            _lessonQuizFeedbackText.Foreground = new SolidColorBrush(Color.FromRgb(146, 64, 14));
+            _lessonQuizFeedbackText.FontWeight = FontWeights.Normal;
+        }
+        _lessonQuizFeedbackText.Text = feedback;
+    }
+
+    private void FlashCurrentLessonQuizHint()
+    {
+        var lesson = MusicTheoryCatalog.Lessons[_activeLessonIndex];
+        var step = lesson.Steps[_activeStepIndex];
+        if (step.Quiz is not { } quiz) return;
+        _fretboard.FlashPitchClass(quiz.TargetPitchClass, 750);
+        var targetName = MusicTheoryCatalog.NoteName(quiz.TargetPitchClass, MusicTheoryCatalog.PreferFlatsForTonic(_fretboard.TonicPitch));
+        _setStatus?.Invoke($"已闪烁提示目标音「{targetName}」在指板上的位置，快点一下完成闯关吧！");
+    }
+
+    private void HandleLessonQuizFretClick(int stringIdx, int fret, int midi)
+    {
+        var lesson = MusicTheoryCatalog.Lessons[_activeLessonIndex];
+        var step = lesson.Steps[_activeStepIndex];
+        if (step.Quiz is not { } quiz) return;
+
+        var clickedPc = ((midi % 12) + 12) % 12;
+        var preferFlats = MusicTheoryCatalog.PreferFlatsForTonic(_fretboard.TonicPitch);
+        var clickedNote = MusicTheoryCatalog.NoteName(clickedPc, preferFlats);
+        var humanString = 6 - stringIdx;
+
+        if (quiz.RequiredStringIdx is { } reqS && reqS != stringIdx)
+        {
+            var reqHuman = 6 - reqS;
+            if (!_quizSolvedInCurrentStep)
+                SetQuizVisualState(false, $"🤔 你点到了 {humanString} 弦 {fret} 品（{clickedNote}）—— 本题限定在「{reqHuman} 弦」上找哦，再试一下！", isError: true);
+            return;
+        }
+
+        if ((quiz.MinFret is { } minF && fret < minF) || (quiz.MaxFret is { } maxF && fret > maxF))
+        {
+            if (!_quizSolvedInCurrentStep)
+                SetQuizVisualState(false, $"🤔 你点到了 {humanString} 弦 {fret} 品（{clickedNote}）—— 请在题目指定的把位品格范围内寻找！", isError: true);
+            return;
+        }
+
+        if (clickedPc != ((quiz.TargetPitchClass % 12) + 12) % 12)
+        {
+            if (!_quizSolvedInCurrentStep)
+                SetQuizVisualState(false, $"🤔 刚才点到的是 {humanString} 弦 {fret} 品「{clickedNote}」，还差一点点！可点右上角「💡 闪烁提示」观察音位。", isError: true);
+            return;
+        }
+
+        _quizSolvedInCurrentStep = true;
+        _fretboard.FlashPitchClass(clickedPc, 650);
+        MarkLessonCompleted(lesson.Id, completed: true);
+        SetQuizVisualState(true, $"✅ {quiz.SuccessMessage}（命中 {humanString} 弦 {fret} 品 {clickedNote} · 本课已自动点亮「✓ 已掌握」！）", isError: false);
+    }
+
+    private void RebuildLessonPortals(TheoryLesson lesson)
+    {
+        if (_lessonPortalWrap is null) return;
+        _lessonPortalWrap.Children.Clear();
+
+        if (!string.IsNullOrWhiteSpace(lesson.PracticeDrillId))
+        {
+            var drillId = lesson.PracticeDrillId;
+            var btn = CreatePillButton("⚡ 去练功房实操", isPrimary: false, toolTip: "跳转到「指板练功房」直接跟练本课配套机能/把位科目");
+            btn.Margin = new Thickness(0, 2, 6, 2);
+            btn.Click += (_, _) =>
+            {
+                SwitchTab(3);
+                _drillStage.SelectPresetById(drillId);
+            };
+            _lessonPortalWrap.Children.Add(btn);
+        }
+
+        if (!string.IsNullOrWhiteSpace(lesson.PracticeChordSymbol))
+        {
+            var sym = lesson.PracticeChordSymbol;
+            var btn = CreatePillButton($"🎸 解剖 {sym}", isPrimary: false, toolTip: $"在「和弦解剖库」查看 {sym} 的六弦组成音与 CAGED 全把位按法");
+            btn.Margin = new Thickness(0, 2, 6, 2);
+            btn.Click += (_, _) =>
+            {
+                SelectChordBySymbol(sym, syncToFretboard: true, autoAudition: true);
+                SwitchTab(1);
+            };
+            _lessonPortalWrap.Children.Add(btn);
+        }
+
+        if (!string.IsNullOrWhiteSpace(lesson.CustomProgressionChords))
+        {
+            var csv = lesson.CustomProgressionChords;
+            var btn = CreatePillButton("🎵 送入进行台试听", isPrimary: false, toolTip: "将本课示范和弦进行载入「和弦进行 & 靶向音」开启四色靶向跟弹");
+            btn.Margin = new Thickness(0, 2, 6, 2);
+            btn.Click += (_, _) => OpenCustomProgressionFromLesson(csv, lesson.Steps[0].TonicPitch);
+            _lessonPortalWrap.Children.Add(btn);
+        }
+        else if (!string.IsNullOrWhiteSpace(lesson.PracticeProgressionId))
+        {
+            var pid = lesson.PracticeProgressionId;
+            var preset = MusicTheoryCatalog.ProgressionPresets.FirstOrDefault(p => string.Equals(p.Id, pid, StringComparison.OrdinalIgnoreCase));
+            if (preset is not null)
+            {
+                var btn = CreatePillButton("🎵 送入进行台试听", isPrimary: false, toolTip: $"载入「{preset.Name}」体验靶向音染色跟弹");
+                btn.Margin = new Thickness(0, 2, 6, 2);
+                btn.Click += (_, _) =>
+                {
+                    LoadProgressionPreset(preset);
+                    SwitchTab(2);
+                    ActivateProgressionStep(0, playSound: true);
+                };
+                _lessonPortalWrap.Children.Add(btn);
+            }
+        }
+    }
+
+    private void OpenCustomProgressionFromLesson(string csvChords, int tonicPitch)
+    {
+        var chords = csvChords.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (chords.Length == 0) return;
+
+        StopProgressionPlayback();
+        _activePresetId = "";
+        var keyName = MusicTheoryCatalog.NoteName(tonicPitch, MusicTheoryCatalog.PreferFlatsForTonic(tonicPitch));
+        _progressionSteps = chords.Select(c => new ProgressionStep(c, ChordTranspose.ToDegree(c, keyName), 4)).ToList();
+        _fretboard.TonicPitch = tonicPitch;
+        _fretboard.Scale = MusicTheoryCatalog.GetScale("major");
+        SyncTopControlsFromFretboard();
+        RebuildProgressionPresetPills();
+        RebuildProgressionTimeline();
+        SwitchTab(2);
+        ActivateProgressionStep(0, playSound: true);
+        _setStatus?.Invoke($"已载入本课示范进行：{string.Join(" → ", chords)}（点击「▶ 循环播放」可观察四色靶向内音流动）。");
     }
 
     private void RebuildLessonPracticePanels()
@@ -1915,8 +2579,14 @@ public sealed class TheoryStudioView : UserControl, IDisposable
             _lessonScalePillsWrap.Children.Add(pill);
         }
 
-        // 2. CAGED 5-box fret-range quick-jump cards
+        // 2. CAGED 5-box fret-range quick-jump cards (hidden when teaching 3NPS mode)
         _lessonCagedCardsWrap.Children.Clear();
+        if (_fretboard.ShowThreeNpsBoxes)
+        {
+            _lessonCagedSection.Visibility = Visibility.Collapsed;
+            return;
+        }
+
         var boxes = MusicTheoryCatalog.ComputeCagedBoxes(_fretboard.TonicPitch, _fretboard.Scale.IsMinorFamily, _fretboard.Tuning, FretboardCanvas.TotalFrets);
         if (boxes.Count == 0)
         {
@@ -1925,7 +2595,6 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         }
         _lessonCagedSection.Visibility = Visibility.Visible;
 
-        // Pick first unique occurrence of each C/A/G/E/D ordered from nut up the neck
         var seenLetters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var box in boxes)
         {
@@ -2001,8 +2670,15 @@ public sealed class TheoryStudioView : UserControl, IDisposable
             LoadLesson(_activeLessonIndex, nextStep, applyToFretboard: true);
             return;
         }
-        if (delta > 0 && _activeLessonIndex + 1 < MusicTheoryCatalog.Lessons.Count)
-            LoadLesson(_activeLessonIndex + 1, 0, applyToFretboard: true);
+        if (delta > 0)
+        {
+            // Finishing the final step marks the current lesson mastered and advances if possible
+            MarkLessonCompleted(lesson.Id, completed: true);
+            if (_activeLessonIndex + 1 < MusicTheoryCatalog.Lessons.Count)
+                LoadLesson(_activeLessonIndex + 1, 0, applyToFretboard: true);
+            else
+                _setStatus?.Invoke("🎉 恭喜！你已完成全部 8 大单元 24 节实用乐理实战课程！");
+        }
         else if (delta < 0 && _activeLessonIndex > 0)
         {
             var prevLesson = MusicTheoryCatalog.Lessons[_activeLessonIndex - 1];

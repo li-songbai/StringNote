@@ -557,6 +557,15 @@ public sealed class CoreLogicTests
             });
 
             lib.DrillBestBpms["u2_28_disp_beat"] = 108;
+            lib.DrillBpmHistory["u2_28_disp_beat"] =
+            [
+                new DrillBpmHistoryEntry { Bpm = 84 },
+                new DrillBpmHistoryEntry { Bpm = 96 },
+                new DrillBpmHistoryEntry { Bpm = 108 }
+            ];
+            lib.WorkoutLogs.Add(new WorkoutLogEntry { DateKey = "2026-11-27", Minutes = 15, CompletedDrills = 4 });
+            lib.CompletedTheoryLessons.Add("u1_01_semitones");
+            lib.CompletedTheoryLessons.Add("u8_24_ear_transcribing");
 
             store.Save(lib);
             var reloaded = store.Load();
@@ -569,6 +578,10 @@ public sealed class CoreLogicTests
             Assert.Equal(2, note.Capo);
             Assert.Equal("G", note.HighlightChord);
             Assert.Equal(108, reloaded.DrillBestBpms["u2_28_disp_beat"]);
+            Assert.Equal([84, 96, 108], reloaded.DrillBpmHistory["u2_28_disp_beat"].Select(x => x.Bpm).ToArray());
+            Assert.Single(reloaded.WorkoutLogs);
+            Assert.Equal(15, reloaded.WorkoutLogs[0].Minutes);
+            Assert.Equal(["u1_01_semitones", "u8_24_ear_transcribing"], reloaded.CompletedTheoryLessons);
         }
         finally
         {
@@ -647,5 +660,128 @@ public sealed class CoreLogicTests
         Assert.True(stepWav.Length > 44);
         Assert.Equal((byte)'R', stepWav[0]);
         Assert.Equal((byte)'W', stepWav[8]);
+
+        // 5. Verify 3NPS 7-position engine produces strictly 3 ascending scale notes per string
+        var npsBoxes = MusicTheoryCatalog.ComputeThreeNpsBoxes(tonicPitch: 7, MusicTheoryCatalog.GetScale("major"), std, maxFret: 17);
+        Assert.True(npsBoxes.Count >= 5);
+        foreach (var box in npsBoxes)
+        {
+            var prevMidi = -1;
+            for (var s = 0; s < 6; s++)
+            {
+                Assert.Equal(3, box.StringFrets[s].Length);
+                foreach (var f in box.StringFrets[s])
+                {
+                    var m = std.OpenMidi[s] + f;
+                    Assert.True(m > prevMidi);
+                    prevMidi = m;
+                }
+            }
+        }
+
+        // 6. Verify 12-key Grand Slam Circle of Fourths in custom window (7..10 frets) + Slide Highway slide links
+        var cof12 = ScaleDrillCatalog.Generate(
+            tonicPitch: 0,
+            scale: MusicTheoryCatalog.GetScale("major_pent"),
+            tuning: std,
+            capo: 0,
+            activeCagedFilter: "ALL",
+            posMode: DrillPositionMode.FixedWindow5To8,
+            pattern: DrillPatternKind.CircleOf4thsPentatonic,
+            subdivision: DrillSubdivision.Eighth,
+            accentMode: DrillAccentMode.BeatDownbeat,
+            fixedWindowStartFret: 7,
+            cofKeyCount: 12,
+            cofBarsPerKey: 1);
+        Assert.Equal(12, cof12.Events.Select(e => e.EffectiveTonicPitch).Distinct().Count());
+        Assert.All(cof12.Events, ev => Assert.InRange(ev.Fret, 7, 11));
+
+        var slideDrill = ScaleDrillCatalog.Generate(
+            tonicPitch: 9,
+            scale: MusicTheoryCatalog.GetScale("minor_pent"),
+            tuning: std,
+            capo: 0,
+            activeCagedFilter: "ALL",
+            posMode: DrillPositionMode.FollowCaged,
+            pattern: DrillPatternKind.SlideHighwayMinorPent,
+            subdivision: DrillSubdivision.Eighth,
+            accentMode: DrillAccentMode.BeatDownbeat);
+        Assert.Contains(slideDrill.Section.Bars.SelectMany(b => b.Notes), n => n.LinkToNext == TabLinkKind.Slide);
+    }
+
+    [Fact]
+    public void MusicTheoryCatalog_Lessons_HaveComplete8UnitsSolvableQuizzesAndValidPortals()
+    {
+        var lessons = MusicTheoryCatalog.Lessons;
+        Assert.Equal(24, lessons.Count);
+        Assert.Equal(24, lessons.Select(l => l.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(8, lessons.Select(l => l.UnitName).Distinct().Count());
+
+        var quizCount = 0;
+        var compareCount = 0;
+
+        foreach (var lesson in lessons)
+        {
+            Assert.True(lesson.Steps.Count >= 3, $"Lesson {lesson.Id} should have at least 3 steps.");
+
+            if (!string.IsNullOrWhiteSpace(lesson.PracticeDrillId))
+                Assert.Contains(ScaleDrillCatalog.Presets, p => p.Id == lesson.PracticeDrillId);
+
+            if (!string.IsNullOrWhiteSpace(lesson.PracticeChordSymbol))
+                Assert.NotNull(ChordCatalog.ByName(lesson.PracticeChordSymbol));
+
+            if (!string.IsNullOrWhiteSpace(lesson.PracticeProgressionId))
+                Assert.Contains(MusicTheoryCatalog.ProgressionPresets, p => p.Id == lesson.PracticeProgressionId);
+
+            if (!string.IsNullOrWhiteSpace(lesson.CustomProgressionChords))
+            {
+                foreach (var sym in lesson.CustomProgressionChords.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    Assert.NotNull(ChordCatalog.ByName(sym));
+            }
+
+            foreach (var step in lesson.Steps)
+            {
+                Assert.False(string.IsNullOrWhiteSpace(step.KeyFormula), $"Step {lesson.Id}/{step.StepTitle} missing KeyFormula.");
+                if (!string.IsNullOrWhiteSpace(step.HighlightChord))
+                    Assert.NotNull(ChordCatalog.ByName(step.HighlightChord));
+
+                if (step.CompareItems is { Count: > 0 } cmpList)
+                {
+                    compareCount++;
+                    foreach (var cmp in cmpList)
+                    {
+                        if (!string.IsNullOrWhiteSpace(cmp.ChordSymbol))
+                            Assert.NotNull(ChordCatalog.ByName(cmp.ChordSymbol));
+                    }
+                }
+
+                if (step.Quiz is { } quiz)
+                {
+                    quizCount++;
+                    var tuning = MusicTheoryCatalog.GetTuning(step.TuningId);
+                    var solvable = false;
+                    for (var s = 0; s < 6; s++)
+                    {
+                        if (quiz.RequiredStringIdx is { } reqS && reqS != s) continue;
+                        for (var f = step.Capo; f <= FretboardCanvas.TotalFrets; f++)
+                        {
+                            if (quiz.MinFret is { } minF && f < minF) continue;
+                            if (quiz.MaxFret is { } maxF && f > maxF) continue;
+                            var pc = (tuning.OpenMidi[s] + f) % 12;
+                            if (pc == ((quiz.TargetPitchClass % 12) + 12) % 12)
+                            {
+                                solvable = true;
+                                break;
+                            }
+                        }
+                        if (solvable) break;
+                    }
+                    Assert.True(solvable, $"Quiz in {lesson.Id} ({step.StepTitle}) has no valid clickable fret on neck!");
+                }
+            }
+        }
+
+        Assert.True(quizCount >= 18);
+        Assert.True(compareCount >= 12);
     }
 }

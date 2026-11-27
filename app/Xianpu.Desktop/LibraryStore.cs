@@ -167,6 +167,11 @@ public sealed class LibraryStore
             loaded.DrillBestBpms = new Dictionary<string, int>(
                 loaded.DrillBestBpms ?? new Dictionary<string, int>(),
                 StringComparer.OrdinalIgnoreCase);
+            loaded.DrillBpmHistory = new Dictionary<string, List<DrillBpmHistoryEntry>>(
+                loaded.DrillBpmHistory ?? new Dictionary<string, List<DrillBpmHistoryEntry>>(),
+                StringComparer.OrdinalIgnoreCase);
+            loaded.WorkoutLogs ??= [];
+            loaded.CompletedTheoryLessons ??= [];
             if (applyCustomChords)
                 ChordCatalog.LoadCustomData(loaded.CustomChordsByKey, loaded.CustomChordShapes);
             foreach (var song in loaded.Songs)

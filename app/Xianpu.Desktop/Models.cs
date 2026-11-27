@@ -13,6 +13,22 @@ public sealed class LibraryData
     public List<CustomChordDefinition> CustomChordShapes { get; set; } = [];
     public List<TheoryNoteItem> TheoryNotes { get; set; } = [];
     public Dictionary<string, int> DrillBestBpms { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, List<DrillBpmHistoryEntry>> DrillBpmHistory { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public List<WorkoutLogEntry> WorkoutLogs { get; set; } = [];
+    public List<string> CompletedTheoryLessons { get; set; } = [];
+}
+
+public sealed class DrillBpmHistoryEntry
+{
+    public DateTime RecordedAt { get; set; } = DateTime.Now;
+    public int Bpm { get; set; }
+}
+
+public sealed class WorkoutLogEntry
+{
+    public string DateKey { get; set; } = ""; // yyyy-MM-dd
+    public int Minutes { get; set; }
+    public int CompletedDrills { get; set; }
 }
 
 public sealed class TheoryNoteItem

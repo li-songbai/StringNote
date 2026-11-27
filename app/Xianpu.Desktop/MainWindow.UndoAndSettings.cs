@@ -235,6 +235,8 @@ public partial class MainWindow
         _library.CustomChordShapes ??= [];
         _library.TheoryNotes ??= [];
         _library.DrillBestBpms ??= new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        _library.DrillBpmHistory ??= new Dictionary<string, List<DrillBpmHistoryEntry>>(StringComparer.OrdinalIgnoreCase);
+        _library.WorkoutLogs ??= [];
         ChordCatalog.LoadCustomData(_library.CustomChordsByKey, _library.CustomChordShapes);
 
         if (_library.Songs.Count == 0)

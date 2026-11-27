@@ -6,18 +6,19 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
 using System.Windows.Threading;
 
 namespace Xianpu.Desktop;
 
 /// <summary>
-/// Interactive Guitar Scale Drill &amp; Fretboard Mastery Stage ("⚡ 指板练功房"):
-/// - 29 structured progressive drills (Spider, 3/4/5-note sequences, 3-against-4 &amp; offbeat accent displacement,
-///   3rd–6th interval skips, diatonic triad/7th alternating arpeggios, single-position Circle of Fifths)
-/// - Live algorithmic TAB sheet rendered via TabPainter with smooth playhead, > accent marks &amp; clickable A–B bar loop
-/// - Synchronized FretboardCanvas lookahead arrow (Current note + Next note preview + Gold accent halo + live key morphing)
-/// - 4-beat woodblock count-in, independent Guitar / Metronome (1234 or 2&amp;4 backbeat) layers, Speed Trainer (+BPM/loop),
-///   mastered BPM check-in badges, high-DPI PNG export, and 1-click insert into active song
+/// Full Phase 1–3 Guitar Scale Drill &amp; Fretboard Mastery Stage ("⚡ 指板练功房"):
+/// - 32 progressive drills (Spider, Diagonal Slide Highways, Sequences, 3-against-4 &amp; offbeat Accent Displacement,
+///   3rd–6th Skips, Diatonic Triad/7th Alternating Arpeggios, Custom-Window 5/12-Key Circle of Fifths)
+/// - Daily 15-Minute Auto-Workout Runner (multi-station countdown + 8s wrist rest buffer + daily streak &amp; minutes tracker)
+/// - BPM Progression Sparkline &amp; Historical Check-in Badges
+/// - Vector 12-Key Circle-of-Fifths Live Dial HUD + custom fret window (2–5 / 5–8 / 7–10 / 9–12) &amp; bars-per-key selector
+/// - Multi-Drill A4 Print / PDF Workbook &amp; Single-Drill PNG / Song Insert
 /// </summary>
 public sealed class ScaleDrillStageView : UserControl, IDisposable
 {
@@ -26,6 +27,34 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
     private static readonly Brush SegTrackBg = Freeze(new SolidColorBrush(Color.FromRgb(236, 240, 238)));
     private static readonly Brush WarmPaperBg = Freeze(new SolidColorBrush(Color.FromRgb(253, 251, 246)));
     private static readonly Brush WarmPaperBorder = Freeze(new SolidColorBrush(Color.FromRgb(232, 226, 211)));
+
+    private sealed record WorkoutStation(string PresetId, int DurationSeconds);
+    private sealed record WorkoutPlan(string Id, string Name, WorkoutStation[] Stations);
+
+    private static readonly IReadOnlyList<WorkoutPlan> WorkoutPlans =
+    [
+        new("all_round_15", "均衡全能 15m",
+        [
+            new("u1_spider_1234", 180),
+            new("u2_28_disp_beat", 240),
+            new("u3_45_skip_4th_2", 240),
+            new("u5_58_cof_pent", 240)
+        ]),
+        new("groove_seq_12", "模进与跨拍律动 12m",
+        [
+            new("u1_slide_mpent", 180),
+            new("u2_29_mdisp_cross", 240),
+            new("u2_33_pent_seq4", 180),
+            new("u2_38_comp_332", 120)
+        ]),
+        new("harmony_cof_15", "顺阶琶音与五度圈 15m",
+        [
+            new("u1_3nps_major", 180),
+            new("u4_52_triad_alt", 210),
+            new("u4_56_7th_alt_up", 240),
+            new("u5_59_cof_major", 270)
+        ])
+    ];
 
     private readonly FretboardCanvas _fretboard;
     private readonly GuitarAudioService _audio;
@@ -37,18 +66,29 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
     private readonly Action<string> _setStatus;
 
     private readonly DispatcherTimer _tickTimer = new(DispatcherPriority.Render);
+    private readonly DispatcherTimer _workoutSecondTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DrillTabSurface _tabSurface = new();
+    private readonly CircleOfFifthsDial _cofDial = new();
+
+    private TextBlock _streakBadgeText = null!;
+    private ComboBox _workoutPlanBox = null!;
+    private Button _startWorkoutBtn = null!;
+    private Border _workoutActiveBar = null!;
+    private TextBlock _workoutProgressText = null!;
+    private ProgressBar _workoutProgressBar = null!;
 
     private StackPanel _presetListPanel = null!;
     private ScrollViewer _tabScroll = null!;
-    private Border _bannerCard = null!;
     private TextBlock _drillTitleText = null!;
     private TextBlock _coachingTipText = null!;
+    private StackPanel _bpmHistoryPanel = null!;
     private TextBlock _liveKeyHudText = null!;
+    private Border _cofOptionsBar = null!;
+
     private Button _playBtn = null!;
     private Button _countInBtn = null!;
     private Button _guitarSoundBtn = null!;
-    private readonly Button[] _metroModeBtns = new Button[3]; // 0=Off, 1=AllBeats, 2=Backbeat24
+    private readonly Button[] _metroModeBtns = new Button[3];
     private TextBlock _bpmText = null!;
     private Button _speedTrainerBtn = null!;
     private Button _stampBpmBtn = null!;
@@ -57,11 +97,17 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
     private readonly Dictionary<DrillPositionMode, Button> _posModeBtns = [];
     private readonly Dictionary<DrillSubdivision, Button> _subdivBtns = [];
     private readonly Dictionary<DrillAccentMode, Button> _accentBtns = [];
+    private readonly Dictionary<int, Button> _cofWinBtns = [];
+    private readonly Dictionary<int, Button> _cofKeyCountBtns = [];
+    private readonly Dictionary<int, Button> _cofBarsBtns = [];
 
-    private ScaleDrillPreset _activePreset = ScaleDrillCatalog.Presets[6]; // Default right to #28 3-note seq + 16th displacement!
+    private ScaleDrillPreset _activePreset = ScaleDrillCatalog.Presets.First(p => p.Id == "u2_28_disp_beat");
     private DrillPositionMode _posMode;
     private DrillSubdivision _subdivision;
     private DrillAccentMode _accentMode;
+    private int _fixedWindowStartFret = 5; // 2, 5, 7, 9
+    private int _cofKeyCount = 5;          // 5 or 12
+    private int _cofBarsPerKey = 2;        // 1, 2, or 4
     private GeneratedScaleDrill? _currentDrill;
 
     private int _bpm = 76;
@@ -77,6 +123,15 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
     private int _playEventIdx;
     private int _savedTonicBeforeCof;
     private string _savedCagedBeforeCof = "ALL";
+
+    // Daily Workout Runner state
+    private bool _workoutActive;
+    private WorkoutPlan _activePlan = WorkoutPlans[0];
+    private int _workoutStationIdx;
+    private int _workoutSecondsLeft;
+    private int _workoutRestSecondsLeft;
+    private int _workoutElapsedTotalSeconds;
+
     private bool _disposed;
 
     public ScaleDrillStageView(
@@ -99,6 +154,7 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
         _setStatus = setStatus;
 
         _tickTimer.Tick += OnDrillTick;
+        _workoutSecondTimer.Tick += OnWorkoutSecondTick;
         _tabSurface.BarClicked += OnTabBarClicked;
 
         Content = BuildLayout();
@@ -107,8 +163,17 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
 
     public void OnTabActivated()
     {
+        UpdateStreakBadge();
         RebuildPresetList();
         RebuildDrill();
+    }
+
+    public void SelectPresetById(string presetId)
+    {
+        var found = ScaleDrillCatalog.Presets.FirstOrDefault(p => string.Equals(p.Id, presetId, StringComparison.OrdinalIgnoreCase));
+        if (found is null) return;
+        if (_workoutActive) StopWorkoutRunner(recordPartial: true);
+        ApplyPreset(found, applyRecommendedScale: true);
     }
 
     public void OnFretboardParametersChanged()
@@ -119,6 +184,12 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
     }
 
     public void StopPlayback()
+    {
+        StopWorkoutRunner(recordPartial: true);
+        StopDrillEngineOnly();
+    }
+
+    private void StopDrillEngineOnly()
     {
         if (!_isPlaying) return;
         _isPlaying = false;
@@ -133,6 +204,7 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
             _fretboard.ActiveCagedFilter = _savedCagedBeforeCof;
             _syncHostTopBar();
             _fretboard.Refresh();
+            _cofDial.Reset(_fretboard.TonicPitch);
         }
 
         _tabSurface.SetPlayhead(new TabPlayheadState(-1, -1, _loopStartBar, _loopEndBar));
@@ -141,11 +213,52 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
     private UIElement BuildLayout()
     {
         var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(272) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(278) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(16) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        // ─── Left: 5-Unit Progressive Curriculum Rail ─────────────────────────
+        // ─── Left: Daily Streak Card + 32-Drill Progressive Curriculum ────────
+        var leftGrid = new Grid();
+        leftGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        leftGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+
+        var workoutCard = new Border
+        {
+            Background = WarmPaperBg,
+            BorderBrush = WarmPaperBorder,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(10, 8, 10, 8),
+            Margin = new Thickness(0, 0, 0, 8)
+        };
+        var wkStack = new StackPanel();
+        _streakBadgeText = new TextBlock
+        {
+            Text = "🔥 每日练琴日课 · 0 天连签",
+            FontSize = 11.5,
+            FontWeight = FontWeights.Bold,
+            Foreground = AppDialogs.AccentHoverBrush,
+            Margin = new Thickness(0, 0, 0, 6)
+        };
+        wkStack.Children.Add(_streakBadgeText);
+
+        var wkRow = new DockPanel();
+        _startWorkoutBtn = CreatePillButton("▶ 开练", isPrimary: true, toolTip: "一键开启多科目自动倒计时热身日课（带组间 8 秒放松换手倒数）");
+        _startWorkoutBtn.Margin = new Thickness(6, 0, 0, 0);
+        _startWorkoutBtn.Click += (_, _) => ToggleDailyWorkout();
+        DockPanel.SetDock(_startWorkoutBtn, Dock.Right);
+        wkRow.Children.Add(_startWorkoutBtn);
+
+        _workoutPlanBox = new ComboBox { Height = 26, FontSize = 11.5 };
+        foreach (var plan in WorkoutPlans)
+            _workoutPlanBox.Items.Add(new ComboBoxItem { Content = plan.Name, Tag = plan.Id });
+        _workoutPlanBox.SelectedIndex = 0;
+        wkRow.Children.Add(_workoutPlanBox);
+        wkStack.Children.Add(wkRow);
+        workoutCard.Child = wkStack;
+        Grid.SetRow(workoutCard, 0);
+        leftGrid.Children.Add(workoutCard);
+
         _presetListPanel = new StackPanel();
         var presetScroll = new ScrollViewer
         {
@@ -153,67 +266,172 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             Content = _presetListPanel
         };
-        var leftCard = new Border
+        var leftListCard = new Border
         {
             Background = SoftSurface,
             CornerRadius = new CornerRadius(10),
             Padding = new Thickness(8),
             Child = presetScroll
         };
-        Grid.SetColumn(leftCard, 0);
-        grid.Children.Add(leftCard);
+        Grid.SetRow(leftListCard, 1);
+        leftGrid.Children.Add(leftListCard);
 
-        // ─── Right: Control Cockpit + Live Interactive TAB Stage ──────────────
+        Grid.SetColumn(leftGrid, 0);
+        grid.Children.Add(leftGrid);
+
+        // ─── Right: Workout Bar + Coaching/CoF Banner + Cockpit + Live TAB ────
         var rightGrid = new Grid();
-        rightGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Banner
-        rightGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Transport & Recipe
-        rightGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Live TAB
+        rightGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Row 0: Active Workout Bar
+        rightGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Row 1: Coaching + CoF Dial + Sparkline
+        rightGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Row 2: Transport & Recipe Cockpit
+        rightGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Row 3: Live TAB
 
-        // 1. Coaching Tip & Live Circle-of-Fifths HUD Banner
-        _bannerCard = new Border
+        // Row 0: Collapsible Active Daily Workout Runner Strip
+        _workoutActiveBar = new Border
+        {
+            Visibility = Visibility.Collapsed,
+            Background = AppDialogs.AccentLightBrush,
+            BorderBrush = AppDialogs.AccentBrush,
+            BorderThickness = new Thickness(1.2),
+            CornerRadius = new CornerRadius(9),
+            Padding = new Thickness(12, 6, 12, 6),
+            Margin = new Thickness(0, 0, 0, 8)
+        };
+        var wkActiveDock = new DockPanel();
+        var wkBtns = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0) };
+        var skipStBtn = CreatePillButton("下一站 →", isPrimary: false);
+        skipStBtn.Padding = new Thickness(8, 2, 8, 2);
+        skipStBtn.Margin = new Thickness(0, 0, 6, 0);
+        skipStBtn.Click += (_, _) => AdvanceWorkoutStation();
+        var stopWkBtn = CreatePillButton("结束日课", isPrimary: false);
+        stopWkBtn.Padding = new Thickness(8, 2, 8, 2);
+        stopWkBtn.Click += (_, _) => StopWorkoutRunner(recordPartial: true);
+        wkBtns.Children.Add(skipStBtn);
+        wkBtns.Children.Add(stopWkBtn);
+        DockPanel.SetDock(wkBtns, Dock.Right);
+        wkActiveDock.Children.Add(wkBtns);
+
+        var wkProgStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        _workoutProgressText = new TextBlock { FontSize = 12, FontWeight = FontWeights.Bold, Foreground = AppDialogs.AccentHoverBrush, Margin = new Thickness(0, 0, 0, 4) };
+        _workoutProgressBar = new ProgressBar { Height = 5, Minimum = 0, Maximum = 100, Value = 0, Foreground = AppDialogs.AccentBrush, Background = Brushes.White, BorderThickness = new Thickness(0) };
+        wkProgStack.Children.Add(_workoutProgressText);
+        wkProgStack.Children.Add(_workoutProgressBar);
+        wkActiveDock.Children.Add(wkProgStack);
+        _workoutActiveBar.Child = wkActiveDock;
+        Grid.SetRow(_workoutActiveBar, 0);
+        rightGrid.Children.Add(_workoutActiveBar);
+
+        // Row 1: Coaching Tip + BPM Sparkline + CoF 12-Key Dial + Export/Workbook Buttons
+        var bannerCard = new Border
         {
             Background = WarmPaperBg,
             BorderBrush = WarmPaperBorder,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(10),
-            Padding = new Thickness(14, 9, 14, 9),
+            Padding = new Thickness(14, 8, 14, 8),
             Margin = new Thickness(0, 0, 0, 8)
         };
+        var bannerStackOuter = new StackPanel();
         var bannerDock = new DockPanel();
+
         var rightOutBtns = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0) };
 
-        var exportPngBtn = CreatePillButton("🖼 导出练习 PNG", isPrimary: false, toolTip: "将当前生成的六线谱练习导出为高清无水印 PNG 练习页");
+        var workbookBtn = CreatePillButton("📚 练习册打印/PDF", isPrimary: false, toolTip: "多选勾选多条练习，一键排版输出防断行 A4 练习册 PDF 或合集长图");
+        workbookBtn.Margin = new Thickness(0, 0, 6, 0);
+        workbookBtn.Click += (_, _) => OpenWorkbookDialog();
+
+        var exportPngBtn = CreatePillButton("🖼 单图PNG", isPrimary: false, toolTip: "导出当前单条练习的高清 PNG");
         exportPngBtn.Margin = new Thickness(0, 0, 6, 0);
         exportPngBtn.Click += (_, _) => ExportDrillPng();
 
-        var insertSongBtn = CreatePillButton("📥 插入当前曲谱", isPrimary: false, toolTip: "将本条练习作为六线谱段落插入当前正在编辑的曲谱末尾");
+        var insertSongBtn = CreatePillButton("📥 插入曲谱", isPrimary: false, toolTip: "将本条练习作为六线谱段落插入当前曲谱末尾");
         insertSongBtn.Click += (_, _) => InsertDrillIntoCurrentSong();
 
+        rightOutBtns.Children.Add(workbookBtn);
         rightOutBtns.Children.Add(exportPngBtn);
         rightOutBtns.Children.Add(insertSongBtn);
         DockPanel.SetDock(rightOutBtns, Dock.Right);
         bannerDock.Children.Add(rightOutBtns);
 
-        var bannerStack = new StackPanel();
-        _drillTitleText = new TextBlock { FontSize = 14, FontWeight = FontWeights.Bold, Foreground = AppDialogs.TitleBrush };
+        _cofDial.Visibility = Visibility.Collapsed;
+        _cofDial.Margin = new Thickness(0, 0, 12, 0);
+        DockPanel.SetDock(_cofDial, Dock.Left);
+        bannerDock.Children.Add(_cofDial);
+
+        var bannerInfoStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        _drillTitleText = new TextBlock { FontSize = 13.5, FontWeight = FontWeights.Bold, Foreground = AppDialogs.TitleBrush, TextTrimming = TextTrimming.CharacterEllipsis };
         _coachingTipText = new TextBlock { FontSize = 11.5, Foreground = AppDialogs.BodyBrush, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0) };
+        _bpmHistoryPanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0), Visibility = Visibility.Collapsed };
         _liveKeyHudText = new TextBlock
         {
             Visibility = Visibility.Collapsed,
-            FontSize = 12.5,
+            FontSize = 12,
             FontWeight = FontWeights.Bold,
             Foreground = new SolidColorBrush(Color.FromRgb(194, 65, 12)),
             Margin = new Thickness(0, 4, 0, 0)
         };
-        bannerStack.Children.Add(_drillTitleText);
-        bannerStack.Children.Add(_coachingTipText);
-        bannerStack.Children.Add(_liveKeyHudText);
-        bannerDock.Children.Add(bannerStack);
-        _bannerCard.Child = bannerDock;
-        Grid.SetRow(_bannerCard, 0);
-        rightGrid.Children.Add(_bannerCard);
+        bannerInfoStack.Children.Add(_drillTitleText);
+        bannerInfoStack.Children.Add(_coachingTipText);
+        bannerInfoStack.Children.Add(_bpmHistoryPanel);
+        bannerInfoStack.Children.Add(_liveKeyHudText);
+        bannerDock.Children.Add(bannerInfoStack);
+        bannerStackOuter.Children.Add(bannerDock);
 
-        // 2. Transport + Recipe Cockpit
+        // Circle-of-Fifths dedicated customizer row (Window 2-5 / 5-8 / 7-10 / 9-12 + 5/12 keys + 1/2/4 bars)
+        _cofOptionsBar = new Border
+        {
+            Visibility = Visibility.Collapsed,
+            BorderBrush = WarmPaperBorder,
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Margin = new Thickness(0, 7, 0, 0),
+            Padding = new Thickness(0, 6, 0, 0)
+        };
+        var cofWrap = new WrapPanel { VerticalAlignment = VerticalAlignment.Center };
+        cofWrap.Children.Add(MakeMiniLabel("锁死品位窗"));
+        var winSeg = CreateSegTrack();
+        winSeg.Margin = new Thickness(0, 1, 10, 1);
+        foreach (var (wf, wlbl) in new[] { (2, "2–5品"), (5, "5–8品"), (7, "7–10品"), (9, "9–12品") })
+        {
+            var startF = wf;
+            var wb = CreateSegBtn(wlbl);
+            wb.Click += (_, _) => { _fixedWindowStartFret = startF; UpdateCofOptionStyles(); RebuildDrill(); };
+            _cofWinBtns[startF] = wb;
+            ((StackPanel)winSeg.Child).Children.Add(wb);
+        }
+        cofWrap.Children.Add(winSeg);
+
+        cofWrap.Children.Add(MakeMiniLabel("五度圈数"));
+        var kcSeg = CreateSegTrack();
+        kcSeg.Margin = new Thickness(0, 1, 10, 1);
+        foreach (var (kc, klbl) in new[] { (5, "精华 5调 (五形全满)"), (12, "大满贯 12调闭环") })
+        {
+            var count = kc;
+            var kb = CreateSegBtn(klbl);
+            kb.Click += (_, _) => { _cofKeyCount = count; UpdateCofOptionStyles(); RebuildDrill(); };
+            _cofKeyCountBtns[count] = kb;
+            ((StackPanel)kcSeg.Child).Children.Add(kb);
+        }
+        cofWrap.Children.Add(kcSeg);
+
+        cofWrap.Children.Add(MakeMiniLabel("每调停留"));
+        var bkSeg = CreateSegTrack();
+        foreach (var (bk, blbl) in new[] { (1, "1小节"), (2, "2小节"), (4, "4小节") })
+        {
+            var bars = bk;
+            var bb = CreateSegBtn(blbl);
+            bb.Click += (_, _) => { _cofBarsPerKey = bars; UpdateCofOptionStyles(); RebuildDrill(); };
+            _cofBarsBtns[bars] = bb;
+            ((StackPanel)bkSeg.Child).Children.Add(bb);
+        }
+        cofWrap.Children.Add(bkSeg);
+        _cofOptionsBar.Child = cofWrap;
+        bannerStackOuter.Children.Add(_cofOptionsBar);
+
+        bannerCard.Child = bannerStackOuter;
+        Grid.SetRow(bannerCard, 1);
+        rightGrid.Children.Add(bannerCard);
+
+        // Row 2: Transport + Recipe Cockpit
         var ctrlCard = new Border
         {
             Background = SoftSurface,
@@ -223,7 +441,6 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
         };
         var ctrlStack = new StackPanel();
 
-        // Row A: Playback, Count-in, Sound layers, BPM, Speed Trainer, Stamp BPM
         var rowA = new WrapPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 0, 5) };
 
         _playBtn = CreatePillButton("▶ 开始跟练", isPrimary: true, toolTip: "启动指板预判箭头与下方六线谱动态游标同步跟练");
@@ -231,13 +448,13 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
         _playBtn.Click += (_, _) => TogglePlayback();
         rowA.Children.Add(_playBtn);
 
-        _countInBtn = CreatePillButton("预备 4拍", isPrimary: false, toolTip: "开启后先打 4 拍木鱼倒数再进入第 1 音，从容落手");
+        _countInBtn = CreatePillButton("预备 4拍", isPrimary: false, toolTip: "开启后先打 4 拍木鱼倒数再进入第 1 音");
         _countInBtn.Margin = new Thickness(0, 2, 6, 2);
         _countInBtn.Click += (_, _) => { _useCountIn = !_useCountIn; StyleTogglePill(_countInBtn, _useCountIn); };
         StyleTogglePill(_countInBtn, _useCountIn);
         rowA.Children.Add(_countInBtn);
 
-        _guitarSoundBtn = CreatePillButton("🎸 示范音", isPrimary: false, toolTip: "可随时关闭吉他示范音，仅保留节拍器与指板光点自己跟弹");
+        _guitarSoundBtn = CreatePillButton("🎸 示范音", isPrimary: false, toolTip: "可随时关闭示范音，仅留节拍器与指板光点跟弹");
         _guitarSoundBtn.Margin = new Thickness(0, 2, 8, 2);
         _guitarSoundBtn.Click += (_, _) => { _playGuitarDemo = !_playGuitarDemo; StyleTogglePill(_guitarSoundBtn, _playGuitarDemo); };
         StyleTogglePill(_guitarSoundBtn, _playGuitarDemo);
@@ -245,109 +462,88 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
 
         var metroSeg = CreateSegTrack();
         metroSeg.Margin = new Thickness(0, 2, 8, 2);
-        var metroStack = (StackPanel)metroSeg.Child;
         string[] metroLabels = ["静音拍", "🪵 正拍", "🪵 2&4反拍"];
         for (var m = 0; m < 3; m++)
         {
             var mode = m;
             var mb = CreateSegBtn(metroLabels[m]);
-            mb.ToolTip = mode == 2 ? "进阶律动训练：仅在第 2、4 反拍敲响木鱼" : "切换节拍器伴奏模式";
             mb.Click += (_, _) => { _metronomeMode = mode; UpdateMetroSegStyles(); };
             _metroModeBtns[m] = mb;
-            metroStack.Children.Add(mb);
+            ((StackPanel)metroSeg.Child).Children.Add(mb);
         }
         UpdateMetroSegStyles();
         rowA.Children.Add(metroSeg);
 
         var bpmSeg = CreateSegTrack();
         bpmSeg.Margin = new Thickness(0, 2, 8, 2);
-        var bpmStack = (StackPanel)bpmSeg.Child;
         var minusBtn = CreateSegBtn("−", 22);
         minusBtn.Click += (_, _) => AdjustBpm(-4);
         _bpmText = new TextBlock { Text = "76 BPM", FontSize = 11.5, FontWeight = FontWeights.Bold, Foreground = AppDialogs.TitleBrush, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 6, 0) };
         var plusBtn = CreateSegBtn("+", 22);
         plusBtn.Click += (_, _) => AdjustBpm(4);
-        bpmStack.Children.Add(minusBtn);
-        bpmStack.Children.Add(_bpmText);
-        bpmStack.Children.Add(plusBtn);
+        ((StackPanel)bpmSeg.Child).Children.Add(minusBtn);
+        ((StackPanel)bpmSeg.Child).Children.Add(_bpmText);
+        ((StackPanel)bpmSeg.Child).Children.Add(plusBtn);
         rowA.Children.Add(bpmSeg);
 
-        _speedTrainerBtn = CreatePillButton("🚀 阶梯提速", isPrimary: false, toolTip: "每完整弹完一轮自动 +4 BPM（上限 160 BPM），循序渐进突破手速");
+        _speedTrainerBtn = CreatePillButton("🚀 阶梯提速", isPrimary: false, toolTip: "每完整弹完一轮自动 +4 BPM");
         _speedTrainerBtn.Margin = new Thickness(0, 2, 6, 2);
         _speedTrainerBtn.Click += (_, _) => { _speedTrainer = !_speedTrainer; StyleTogglePill(_speedTrainerBtn, _speedTrainer, "#D97706"); };
         rowA.Children.Add(_speedTrainerBtn);
 
-        _stampBpmBtn = CreatePillButton("★ 打卡当前速度", isPrimary: false, toolTip: "记录本条练习目前已稳定拿下的最高 BPM 到本地档案");
+        _stampBpmBtn = CreatePillButton("★ 打卡当前速度", isPrimary: false, toolTip: "记录当前 BPM 并生成速度成长折线轨迹");
         _stampBpmBtn.Margin = new Thickness(0, 2, 0, 2);
         _stampBpmBtn.Click += (_, _) => StampMasteredBpm();
         rowA.Children.Add(_stampBpmBtn);
 
         ctrlStack.Children.Add(rowA);
 
-        // Row B: Position Lock + Subdivision + Accent Displacement + Clear Loop
         var rowB = new WrapPanel { VerticalAlignment = VerticalAlignment.Center };
-
         rowB.Children.Add(MakeMiniLabel("把位"));
         var posSeg = CreateSegTrack();
         posSeg.Margin = new Thickness(0, 2, 10, 2);
-        var posStack = (StackPanel)posSeg.Child;
-        (DrillPositionMode Mode, string Label)[] posItems =
-        [
-            (DrillPositionMode.FollowCaged, "跟随CAGED"),
-            (DrillPositionMode.FixedWindow5To8, "锁5–8品"),
-            (DrillPositionMode.ThreeNotesPerString, "每弦三音(3NPS)")
-        ];
-        foreach (var (pm, lbl) in posItems)
+        foreach (var (pm, lbl) in new[] { (DrillPositionMode.FollowCaged, "跟随CAGED"), (DrillPositionMode.FixedWindow5To8, "固定品窗"), (DrillPositionMode.ThreeNotesPerString, "每弦三音(3NPS)") })
         {
             var m = pm;
             var b = CreateSegBtn(lbl);
             b.Click += (_, _) => { _posMode = m; UpdateRecipeSegStyles(); RebuildDrill(); };
             _posModeBtns[m] = b;
-            posStack.Children.Add(b);
+            ((StackPanel)posSeg.Child).Children.Add(b);
         }
         rowB.Children.Add(posSeg);
 
         rowB.Children.Add(MakeMiniLabel("细分"));
         var subSeg = CreateSegTrack();
         subSeg.Margin = new Thickness(0, 2, 10, 2);
-        var subStack = (StackPanel)subSeg.Child;
-        (DrillSubdivision Sub, string Label)[] subItems =
-        [
-            (DrillSubdivision.Eighth, "八分"),
-            (DrillSubdivision.Triplet, "三连音"),
-            (DrillSubdivision.Sixteenth, "十六分")
-        ];
-        foreach (var (sd, lbl) in subItems)
+        foreach (var (sd, lbl) in new[] { (DrillSubdivision.Eighth, "八分"), (DrillSubdivision.Triplet, "三连音"), (DrillSubdivision.Sixteenth, "十六分") })
         {
             var s = sd;
             var b = CreateSegBtn(lbl);
             b.Click += (_, _) => { _subdivision = s; UpdateTimerIntervalIfPlaying(); UpdateRecipeSegStyles(); RebuildDrill(); };
             _subdivBtns[s] = b;
-            subStack.Children.Add(b);
+            ((StackPanel)subSeg.Child).Children.Add(b);
         }
         rowB.Children.Add(subSeg);
 
         rowB.Children.Add(MakeMiniLabel("重音移位"));
         var accSeg = CreateSegTrack();
         accSeg.Margin = new Thickness(0, 2, 8, 2);
-        var accStack = (StackPanel)accSeg.Child;
-        (DrillAccentMode Acc, string Label, string Tip)[] accItems =
-        [
-            (DrillAccentMode.None, "无", "均匀音量无额外重音"),
-            (DrillAccentMode.BeatDownbeat, "拍头错位", "每拍第 1 音重弹（三音模进遇上十六分时自动产生组内重音轮转！）"),
-            (DrillAccentMode.GroupOf3CrossBeat, "3对4跨拍", "每隔 3 个音重弹一次（>），打破小节线制造现代 Fusion 律动"),
-            (DrillAccentMode.OffbeatSecond16th, "第2音后移", "每拍第 2 个十六分音符重弹 (1 >2 3 4)"),
-            (DrillAccentMode.OffbeatUpbeat, "反拍(&)", "每拍正反拍重弹 (1 2 >3 4)"),
-            (DrillAccentMode.Compound332, "3+3+2", "按 Tresillo 3+3+2 复合节奏重弹")
-        ];
-        foreach (var (am, lbl, tip) in accItems)
+        foreach (var (am, lbl, tip) in new[]
+        {
+            (DrillAccentMode.None, "无", "均匀音量"),
+            (DrillAccentMode.BeatDownbeat, "拍头错位", "每拍拍头重音（三音模进遇十六分自动组内移位）"),
+            (DrillAccentMode.GroupOf3CrossBeat, "3对4跨拍", "每隔 3 音重弹一次"),
+            (DrillAccentMode.OffbeatSecond16th, "第2音后移", "每拍第 2 个十六分重音"),
+            (DrillAccentMode.OffbeatUpbeat, "反拍(&)", "正反拍重音"),
+            (DrillAccentMode.Compound332, "3+3+2", "Tresillo 复合重音")
+        })
         {
             var a = am;
             var b = CreateSegBtn(lbl);
             b.ToolTip = tip;
             b.Click += (_, _) => { _accentMode = a; UpdateRecipeSegStyles(); RebuildDrill(); };
             _accentBtns[a] = b;
-            accStack.Children.Add(b);
+            ((StackPanel)accSeg.Child).Children.Add(b);
         }
         rowB.Children.Add(accSeg);
 
@@ -360,16 +556,16 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
             _loopStartBar = -1;
             _loopEndBar = -1;
             _clearLoopBtn.Visibility = Visibility.Collapsed;
-            _tabSurface.SetPlayhead(new TabPlayheadState(_isPlaying && _currentDrill is not null && _playEventIdx < _currentDrill.Events.Count ? _currentDrill.Events[_playEventIdx].BarIndex : -1, -1, -1, -1));
+            _tabSurface.SetPlayhead(new TabPlayheadState(-1, -1, -1, -1));
         };
         rowB.Children.Add(_clearLoopBtn);
 
         ctrlStack.Children.Add(rowB);
         ctrlCard.Child = ctrlStack;
-        Grid.SetRow(ctrlCard, 1);
+        Grid.SetRow(ctrlCard, 2);
         rightGrid.Children.Add(ctrlCard);
 
-        // 3. Interactive Live TAB Score Surface
+        // Row 3: Live Interactive TAB Sheet
         _tabScroll = new ScrollViewer
         {
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -385,16 +581,184 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
             Padding = new Thickness(12, 8, 12, 8),
             Child = _tabScroll
         };
-        Grid.SetRow(tabCard, 2);
+        Grid.SetRow(tabCard, 3);
         rightGrid.Children.Add(tabCard);
 
         Grid.SetColumn(rightGrid, 2);
         grid.Children.Add(rightGrid);
 
+        UpdateCofOptionStyles();
         return grid;
     }
 
-    // ─── Curriculum & Generation ──────────────────────────────────────────────────
+    // ─── Daily 15-Minute Auto-Workout Runner & Streak Engine ──────────────────────
+
+    private void ToggleDailyWorkout()
+    {
+        if (_workoutActive)
+        {
+            StopWorkoutRunner(recordPartial: true);
+            return;
+        }
+
+        if (_workoutPlanBox.SelectedItem is ComboBoxItem { Tag: string pid })
+            _activePlan = WorkoutPlans.FirstOrDefault(p => p.Id == pid) ?? WorkoutPlans[0];
+
+        _workoutActive = true;
+        _workoutStationIdx = 0;
+        _workoutRestSecondsLeft = 0;
+        _workoutElapsedTotalSeconds = 0;
+        _startWorkoutBtn.Content = "■ 结束";
+        _workoutActiveBar.Visibility = Visibility.Visible;
+
+        LaunchCurrentWorkoutStation();
+        _workoutSecondTimer.Start();
+    }
+
+    private void LaunchCurrentWorkoutStation()
+    {
+        if (!_workoutActive || _workoutStationIdx >= _activePlan.Stations.Length)
+        {
+            CompleteWorkoutCelebration();
+            return;
+        }
+
+        var st = _activePlan.Stations[_workoutStationIdx];
+        var preset = ScaleDrillCatalog.Presets.FirstOrDefault(p => p.Id == st.PresetId) ?? ScaleDrillCatalog.Presets[0];
+        _workoutSecondsLeft = st.DurationSeconds;
+        _workoutRestSecondsLeft = 0;
+
+        StopDrillEngineOnly();
+        ApplyPreset(preset, applyRecommendedScale: true);
+        UpdateWorkoutProgressUi();
+        StartDrillEngine();
+    }
+
+    private void AdvanceWorkoutStation()
+    {
+        if (!_workoutActive) return;
+        _workoutStationIdx++;
+        if (_workoutStationIdx >= _activePlan.Stations.Length)
+        {
+            CompleteWorkoutCelebration();
+            return;
+        }
+
+        // 8-second wrist-relax transition buffer before next station
+        StopDrillEngineOnly();
+        _workoutRestSecondsLeft = 8;
+        UpdateWorkoutProgressUi();
+    }
+
+    private void OnWorkoutSecondTick(object? sender, EventArgs e)
+    {
+        if (!_workoutActive)
+        {
+            _workoutSecondTimer.Stop();
+            return;
+        }
+
+        if (_workoutRestSecondsLeft > 0)
+        {
+            _workoutRestSecondsLeft--;
+            _audio.PlayDrillStep(null, false, playClick: _workoutRestSecondsLeft <= 3, isDownbeatClick: _workoutRestSecondsLeft == 0, durationMs: 140);
+            if (_workoutRestSecondsLeft <= 0)
+            {
+                LaunchCurrentWorkoutStation();
+            }
+            else
+            {
+                UpdateWorkoutProgressUi();
+            }
+            return;
+        }
+
+        _workoutElapsedTotalSeconds++;
+        _workoutSecondsLeft--;
+        UpdateWorkoutProgressUi();
+
+        if (_workoutSecondsLeft <= 0)
+            AdvanceWorkoutStation();
+    }
+
+    private void UpdateWorkoutProgressUi()
+    {
+        if (!_workoutActive) return;
+        if (_workoutRestSecondsLeft > 0 && _workoutStationIdx < _activePlan.Stations.Length)
+        {
+            var nextPreset = ScaleDrillCatalog.Presets.FirstOrDefault(p => p.Id == _activePlan.Stations[_workoutStationIdx].PresetId);
+            _workoutProgressText.Text = $"☕ 组间放松手腕 {_workoutRestSecondsLeft} 秒…  即将进入第 {_workoutStationIdx + 1}/{_activePlan.Stations.Length} 站：{nextPreset?.Title}";
+            _workoutProgressBar.Value = (8 - _workoutRestSecondsLeft) * 100.0 / 8.0;
+            return;
+        }
+
+        var st = _activePlan.Stations[Math.Clamp(_workoutStationIdx, 0, _activePlan.Stations.Length - 1)];
+        var mins = _workoutSecondsLeft / 60;
+        var secs = _workoutSecondsLeft % 60;
+        _workoutProgressText.Text = $"🔥 {_activePlan.Name} · 第 {_workoutStationIdx + 1}/{_activePlan.Stations.Length} 站 [{_activePreset.CodeBadge} {_activePreset.Title}]   本项剩余 {mins:00}:{secs:00}";
+        _workoutProgressBar.Value = Math.Clamp((st.DurationSeconds - _workoutSecondsLeft) * 100.0 / Math.Max(1, st.DurationSeconds), 0, 100);
+    }
+
+    private void CompleteWorkoutCelebration()
+    {
+        RecordWorkoutMinutes(Math.Max(1, (int)Math.Ceiling(_workoutElapsedTotalSeconds / 60.0)), _activePlan.Stations.Length);
+        StopWorkoutRunner(recordPartial: false);
+        _setStatus($"🎉 太棒了！已完成今日「{_activePlan.Name}」全部 {_activePlan.Stations.Length} 站训练，打卡连签已更新！");
+    }
+
+    private void StopWorkoutRunner(bool recordPartial)
+    {
+        if (!_workoutActive) return;
+        if (recordPartial && _workoutElapsedTotalSeconds >= 45)
+            RecordWorkoutMinutes(Math.Max(1, _workoutElapsedTotalSeconds / 60), Math.Max(1, _workoutStationIdx));
+
+        _workoutActive = false;
+        _workoutSecondTimer.Stop();
+        if (_startWorkoutBtn is not null) _startWorkoutBtn.Content = "▶ 开练";
+        if (_workoutActiveBar is not null) _workoutActiveBar.Visibility = Visibility.Collapsed;
+        StopDrillEngineOnly();
+    }
+
+    private void RecordWorkoutMinutes(int minutes, int completedDrills)
+    {
+        var lib = _getLibrary?.Invoke();
+        if (lib is null) return;
+        var today = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var entry = lib.WorkoutLogs.FirstOrDefault(x => x.DateKey == today);
+        if (entry is null)
+        {
+            entry = new WorkoutLogEntry { DateKey = today };
+            lib.WorkoutLogs.Add(entry);
+        }
+        entry.Minutes += Math.Max(1, minutes);
+        entry.CompletedDrills += Math.Max(1, completedDrills);
+        _onLibraryMutated();
+        UpdateStreakBadge();
+    }
+
+    private void UpdateStreakBadge()
+    {
+        if (_streakBadgeText is null) return;
+        var logs = _getLibrary?.Invoke()?.WorkoutLogs ?? [];
+        var totalMins = logs.Sum(x => x.Minutes);
+        var dateSet = new HashSet<string>(logs.Where(x => x.Minutes > 0).Select(x => x.DateKey), StringComparer.Ordinal);
+
+        var streak = 0;
+        var cursor = DateTime.Today;
+        if (!dateSet.Contains(cursor.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)))
+            cursor = cursor.AddDays(-1);
+        while (dateSet.Contains(cursor.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)))
+        {
+            streak++;
+            cursor = cursor.AddDays(-1);
+        }
+
+        _streakBadgeText.Text = totalMins > 0
+            ? $"🔥 连续打卡 {streak} 天 · 累计练功 {totalMins} 分钟"
+            : "🔥 每日 15m 热身日课 · 一键连播打卡";
+    }
+
+    // ─── Curriculum, Sparkline & Generation ───────────────────────────────────────
 
     private void RebuildPresetList()
     {
@@ -481,14 +845,18 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
             });
 
             rowBorder.Child = dock;
-            rowBorder.MouseLeftButtonDown += (_, _) => ApplyPreset(p, applyRecommendedScale: true);
+            rowBorder.MouseLeftButtonDown += (_, _) =>
+            {
+                if (_workoutActive) StopWorkoutRunner(recordPartial: true);
+                ApplyPreset(p, applyRecommendedScale: true);
+            };
             _presetListPanel.Children.Add(rowBorder);
         }
     }
 
     private void ApplyPreset(ScaleDrillPreset preset, bool applyRecommendedScale)
     {
-        StopPlayback();
+        StopDrillEngineOnly();
         _activePreset = preset;
         _posMode = preset.DefaultPosMode;
         _subdivision = preset.Subdivision;
@@ -500,22 +868,87 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
         if (_clearLoopBtn is not null)
             _clearLoopBtn.Visibility = Visibility.Collapsed;
 
+        var isCof = IsCircleOfFifthsPattern(preset.Pattern);
+        if (_cofOptionsBar is not null)
+            _cofOptionsBar.Visibility = isCof ? Visibility.Visible : Visibility.Collapsed;
+        if (_cofDial is not null)
+        {
+            _cofDial.Visibility = isCof ? Visibility.Visible : Visibility.Collapsed;
+            if (isCof) _cofDial.Reset(_fretboard.TonicPitch);
+        }
+
         if (applyRecommendedScale && preset.Pattern is not (DrillPatternKind.Spider1234 or DrillPatternKind.Spider1324))
         {
             _fretboard.Scale = MusicTheoryCatalog.GetScale(preset.RecommendedScaleId);
             _fretboard.HighlightedChord = null;
             _fretboard.JamTargetColorMode = false;
+            if (preset.DefaultPosMode == DrillPositionMode.ThreeNotesPerString)
+            {
+                _fretboard.ShowThreeNpsBoxes = true;
+                if (_fretboard.ActiveThreeNpsPosition == 0) _fretboard.ActiveThreeNpsPosition = 1;
+            }
             _syncHostTopBar();
             _fretboard.Refresh();
         }
 
         UpdateRecipeSegStyles();
         RebuildPresetList();
+        RebuildBpmSparkline();
         RebuildDrill();
+    }
+
+    private void RebuildBpmSparkline()
+    {
+        if (_bpmHistoryPanel is null) return;
+        _bpmHistoryPanel.Children.Clear();
+
+        var lib = _getLibrary?.Invoke();
+        if (lib is null || !lib.DrillBpmHistory.TryGetValue(_activePreset.Id, out var hist) || hist.Count == 0)
+        {
+            _bpmHistoryPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        _bpmHistoryPanel.Visibility = Visibility.Visible;
+        var recent = hist.TakeLast(7).ToList();
+
+        // Draw crisp mini sparkline canvas when >= 2 records exist
+        if (recent.Count >= 2)
+        {
+            var canvas = new Canvas { Width = 68, Height = 16, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
+            var minB = recent.Min(x => x.Bpm) - 4;
+            var maxB = Math.Max(minB + 8, recent.Max(x => x.Bpm) + 4);
+            var poly = new Polyline
+            {
+                Stroke = AppDialogs.AccentBrush,
+                StrokeThickness = 1.8,
+                StrokeLineJoin = PenLineJoin.Round
+            };
+            for (var i = 0; i < recent.Count; i++)
+            {
+                var x = i * (64.0 / (recent.Count - 1)) + 2;
+                var y = 14 - ((recent[i].Bpm - minB) / (double)(maxB - minB)) * 12;
+                poly.Points.Add(new Point(x, y));
+            }
+            canvas.Children.Add(poly);
+            _bpmHistoryPanel.Children.Add(canvas);
+        }
+
+        var trail = string.Join(" → ", recent.Select(x => x.Bpm));
+        var best = lib.DrillBestBpms.TryGetValue(_activePreset.Id, out var b) ? b : recent.Max(x => x.Bpm);
+        _bpmHistoryPanel.Children.Add(new TextBlock
+        {
+            Text = $"速度成长档案：{trail} BPM  （最高 ★{best} BPM）",
+            FontSize = 11,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = AppDialogs.AccentHoverBrush,
+            VerticalAlignment = VerticalAlignment.Center
+        });
     }
 
     private void RebuildDrill()
     {
+        var npsPos = _fretboard.ActiveThreeNpsPosition > 0 ? _fretboard.ActiveThreeNpsPosition : 1;
         _currentDrill = ScaleDrillCatalog.Generate(
             _fretboard.TonicPitch,
             _fretboard.Scale,
@@ -525,22 +958,34 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
             _posMode,
             _activePreset.Pattern,
             _subdivision,
-            _accentMode);
+            _accentMode,
+            fixedWindowStartFret: _fixedWindowStartFret,
+            cofKeyCount: _cofKeyCount,
+            cofBarsPerKey: _cofBarsPerKey,
+            threeNpsPosition: npsPos);
 
-        _drillTitleText.Text = $"[{_activePreset.CodeBadge}] {_activePreset.Title}  ·  {_currentDrill.Subtitle}（共 {_currentDrill.Section.Bars.Count} 小节 · 点击下方任意小节可单小节死磕循环）";
+        _drillTitleText.Text = $"[{_activePreset.CodeBadge}] {_activePreset.Title}  ·  {_currentDrill.Subtitle}（共 {_currentDrill.Section.Bars.Count} 小节 · 点小节可循环死磕）";
         _coachingTipText.Text = _activePreset.CoachingTip;
         _tabSurface.SetSection(_currentDrill.Section, new TabPlayheadState(-1, -1, _loopStartBar, _loopEndBar));
+        if (IsCircleOfFifthsPattern(_activePreset.Pattern))
+            _cofDial.Reset(_fretboard.TonicPitch);
     }
 
-    // ─── Real-Time Playback, Count-in, Lookahead & Speed Trainer ──────────────────
+    // ─── Playback Engine ──────────────────────────────────────────────────────────
 
     private void TogglePlayback()
     {
         if (_isPlaying)
         {
-            StopPlayback();
+            if (_workoutActive) StopWorkoutRunner(recordPartial: true);
+            else StopDrillEngineOnly();
             return;
         }
+        StartDrillEngine();
+    }
+
+    private void StartDrillEngine()
+    {
         if (_currentDrill is null || _currentDrill.Events.Count == 0)
             RebuildDrill();
         if (_currentDrill is null || _currentDrill.Events.Count == 0)
@@ -575,7 +1020,7 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
     {
         var beatNum = 5 - _countInRemaining;
         _liveKeyHudText.Visibility = Visibility.Visible;
-        _liveKeyHudText.Text = $"⏳ 预备拍倒数：{beatNum} / 4  —  请将左手就位！（即将弹第 1 音）";
+        _liveKeyHudText.Text = $"⏳ 预备拍倒数：{beatNum} / 4  —  请将左手就位！";
 
         if (_currentDrill is { Events.Count: > 0 })
         {
@@ -590,7 +1035,7 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
     {
         if (!_isPlaying || _currentDrill is null || _currentDrill.Events.Count == 0)
         {
-            StopPlayback();
+            StopDrillEngineOnly();
             return;
         }
 
@@ -617,7 +1062,6 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
         var endIdx = FindEndEventIndex();
         if (_playEventIdx > endIdx || _playEventIdx >= _currentDrill.Events.Count)
         {
-            // Completed one full pass!
             if (_speedTrainer && _bpm < 160)
             {
                 _bpm = Math.Min(160, _bpm + 4);
@@ -634,17 +1078,20 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
             : startIdx;
         var nxt = _currentDrill.Events[nextIdx];
 
-        // Live Circle-of-Fifths key & CAGED morphing on the panoramic fretboard!
         if (IsCircleOfFifthsPattern(_activePreset.Pattern))
         {
             if (_fretboard.TonicPitch != ev.EffectiveTonicPitch ||
                 !string.Equals(_fretboard.ActiveCagedFilter, ev.EffectiveCagedLetter, StringComparison.OrdinalIgnoreCase))
             {
+                _fretboard.ShowThreeNpsBoxes = false;
                 _fretboard.TonicPitch = ev.EffectiveTonicPitch;
                 _fretboard.ShowCagedBoxes = true;
                 _fretboard.ActiveCagedFilter = ev.EffectiveCagedLetter;
                 _syncHostTopBar();
             }
+            var stepSemi = _activePreset.Pattern == DrillPatternKind.CircleOf5thsPentatonic ? 7 : 5;
+            var nextTonic = (ev.EffectiveTonicPitch + stepSemi) % 12;
+            _cofDial.UpdateState(ev.EffectiveTonicPitch, nextTonic, ev.EffectiveCagedLetter);
             _liveKeyHudText.Visibility = Visibility.Visible;
             _liveKeyHudText.Text = $"{ev.KeyBannerText}    ➔    {ev.NextKeyPreviewText}";
         }
@@ -653,17 +1100,14 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
             _liveKeyHudText.Visibility = Visibility.Collapsed;
         }
 
-        // Update Fretboard Lookahead (Current + Next trajectory arrow + Gold accent halo)
         _fretboard.SetDrillLookahead((ev.StringIdx, ev.Fret, ev.IsAccent), (nxt.StringIdx, nxt.Fret));
-
-        // Update Live TAB Playhead & Auto-Scroll
         _tabSurface.SetPlayhead(new TabPlayheadState(ev.BarIndex, ev.Column, _loopStartBar, _loopEndBar));
+
         var barY = _tabSurface.GetBarVerticalOffset(ev.BarIndex);
         if (barY >= 0 && (barY < _tabScroll.VerticalOffset || barY > _tabScroll.VerticalOffset + _tabScroll.ViewportHeight - 110))
             _tabScroll.ScrollToVerticalOffset(Math.Max(0, barY - 24));
 
-        // Compute metronome click (Off / All Beats / 2 & 4 Backbeat)
-        var beatInBar = ev.Column / Math.Max(1, _currentDrill.NotesPerBeat); // 0..3
+        var beatInBar = ev.Column / Math.Max(1, _currentDrill.NotesPerBeat);
         var shouldClick = false;
         var isAccentClick = false;
         if (ev.IsBeatStart)
@@ -676,7 +1120,7 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
             else if (_metronomeMode == 2 && beatInBar is 1 or 3)
             {
                 shouldClick = true;
-                isAccentClick = true; // Crisp snare-like backbeat click on beats 2 & 4!
+                isAccentClick = true;
             }
         }
 
@@ -732,11 +1176,9 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
 
         if (shiftHeld && _loopStartBar >= 0)
         {
-            var a = Math.Min(_loopStartBar, barIndex);
-            var b = Math.Max(_loopStartBar, barIndex);
-            _loopStartBar = a;
-            _loopEndBar = b;
-            _setStatus($"🔁 已设置 A–B 选段循环：第 {a + 1} ～ {b + 1} 小节。");
+            _loopStartBar = Math.Min(_loopStartBar, barIndex);
+            _loopEndBar = Math.Max(_loopStartBar, barIndex);
+            _setStatus($"🔁 已设置 A–B 选段循环：第 {_loopStartBar + 1} ～ {_loopEndBar + 1} 小节。");
         }
         else if (_loopStartBar == barIndex && _loopEndBar == barIndex)
         {
@@ -762,17 +1204,48 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
             _loopEndBar));
     }
 
-    // ─── Progress Check-in & PNG / Song Export ────────────────────────────────────
+    // ─── Progress Sparkline Check-in & Workbook / PNG / Song Export ───────────────
 
     private void StampMasteredBpm()
     {
         var lib = _getLibrary?.Invoke();
         if (lib is null) return;
 
-        lib.DrillBestBpms[_activePreset.Id] = _bpm;
+        var prevBest = lib.DrillBestBpms.TryGetValue(_activePreset.Id, out var pb) ? pb : 0;
+        if (_bpm > prevBest)
+            lib.DrillBestBpms[_activePreset.Id] = _bpm;
+
+        if (!lib.DrillBpmHistory.TryGetValue(_activePreset.Id, out var hist))
+        {
+            hist = [];
+            lib.DrillBpmHistory[_activePreset.Id] = hist;
+        }
+        if (hist.Count == 0 || hist[^1].Bpm != _bpm)
+            hist.Add(new DrillBpmHistoryEntry { RecordedAt = DateTime.Now, Bpm = _bpm });
+
+        RecordWorkoutMinutes(1, 1);
         _onLibraryMutated();
         RebuildPresetList();
-        _setStatus($"★ 已打卡记录「[{_activePreset.CodeBadge}] {_activePreset.Title}」达标速度：{_bpm} BPM！");
+        RebuildBpmSparkline();
+        _setStatus($"★ 已打卡记录「[{_activePreset.CodeBadge}] {_activePreset.Title}」速度：{_bpm} BPM！");
+    }
+
+    private void OpenWorkbookDialog()
+    {
+        StopPlayback();
+        var npsPos = _fretboard.ActiveThreeNpsPosition > 0 ? _fretboard.ActiveThreeNpsPosition : 1;
+        DrillWorkbookDialog.Show(
+            Window.GetWindow(this),
+            _fretboard.TonicPitch,
+            _fretboard.Scale,
+            _fretboard.Tuning,
+            _fretboard.Capo,
+            _fretboard.ActiveCagedFilter,
+            _posMode,
+            _fixedWindowStartFret,
+            npsPos,
+            _getLibrary?.Invoke()?.DrillBestBpms,
+            _setStatus);
     }
 
     private void InsertDrillIntoCurrentSong()
@@ -846,7 +1319,7 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
         _setStatus($"已导出高清练习谱图片：{dlg.FileName}");
     }
 
-    // ─── Visual Style Helpers ─────────────────────────────────────────────────────
+    // ─── Style Helpers ────────────────────────────────────────────────────────────
 
     private void UpdateMetroSegStyles()
     {
@@ -859,6 +1332,13 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
         foreach (var (m, b) in _posModeBtns) StyleSegBtn(b, m == _posMode);
         foreach (var (s, b) in _subdivBtns) StyleSegBtn(b, s == _subdivision);
         foreach (var (a, b) in _accentBtns) StyleSegBtn(b, a == _accentMode);
+    }
+
+    private void UpdateCofOptionStyles()
+    {
+        foreach (var (w, b) in _cofWinBtns) StyleSegBtn(b, w == _fixedWindowStartFret);
+        foreach (var (k, b) in _cofKeyCountBtns) StyleSegBtn(b, k == _cofKeyCount);
+        foreach (var (br, b) in _cofBarsBtns) StyleSegBtn(b, br == _cofBarsPerKey);
     }
 
     private static bool IsCircleOfFifthsPattern(DrillPatternKind kind) =>
@@ -953,18 +1433,103 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
         if (_disposed) return;
         _disposed = true;
         _tickTimer.Stop();
+        _workoutSecondTimer.Stop();
     }
 
     /// <summary>
-    /// Lightweight TabPainter-backed interactive surface supporting live playhead &amp; click-bar A–B loop.
+    /// Vector 12-Key Circle-of-Fifths live dial widget showing completed keys, active key + CAGED shape, and upcoming key.
     /// </summary>
+    private sealed class CircleOfFifthsDial : FrameworkElement
+    {
+        private static readonly int[] ClockwiseFifthsPitches = [0, 7, 2, 9, 4, 11, 6, 1, 8, 3, 10, 5];
+        private static readonly string[] ClockwiseLabels = ["C", "G", "D", "A", "E", "B", "Gb", "Db", "Ab", "Eb", "Bb", "F"];
+        private static readonly Typeface DialFace = new(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal);
+
+        private readonly HashSet<int> _visited = [];
+        private int _currentPitch;
+        private int _nextPitch = 5;
+        private string _cagedShape = "G";
+
+        public CircleOfFifthsDial()
+        {
+            Width = 74;
+            Height = 74;
+            VerticalAlignment = VerticalAlignment.Center;
+        }
+
+        public void Reset(int startPitch)
+        {
+            _visited.Clear();
+            _currentPitch = ((startPitch % 12) + 12) % 12;
+            _nextPitch = (_currentPitch + 5) % 12;
+            _cagedShape = "—";
+            InvalidateVisual();
+        }
+
+        public void UpdateState(int currentPitch, int nextPitch, string cagedLetter)
+        {
+            _currentPitch = ((currentPitch % 12) + 12) % 12;
+            _nextPitch = ((nextPitch % 12) + 12) % 12;
+            _cagedShape = cagedLetter;
+            _visited.Add(_currentPitch);
+            InvalidateVisual();
+        }
+
+        protected override void OnRender(DrawingContext dc)
+        {
+            base.OnRender(dc);
+            var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+            var center = new Point(Width / 2, Height / 2);
+            const double ringR = 27.5;
+
+            dc.DrawEllipse(Brushes.White, new Pen(CardBorder, 1.0), center, 35, 35);
+
+            for (var i = 0; i < 12; i++)
+            {
+                var angle = (-90 + i * 30) * Math.PI / 180.0;
+                var pt = new Point(center.X + Math.Cos(angle) * ringR, center.Y + Math.Sin(angle) * ringR);
+                var pc = ClockwiseFifthsPitches[i];
+                var isCur = pc == _currentPitch;
+                var isNxt = pc == _nextPitch;
+                var isDone = _visited.Contains(pc);
+
+                Brush fill = isCur ? AppDialogs.AccentBrush
+                    : isDone ? new SolidColorBrush(Color.FromRgb(187, 222, 201))
+                    : Brushes.Transparent;
+                Pen? pen = isNxt && !isCur ? new Pen(new SolidColorBrush(Color.FromRgb(217, 119, 6)), 1.5) : null;
+
+                dc.DrawEllipse(fill, pen, pt, isCur ? 8.2 : 6.8, isCur ? 8.2 : 6.8);
+
+                var ft = new FormattedText(
+                    ClockwiseLabels[i],
+                    CultureInfo.InvariantCulture,
+                    FlowDirection.LeftToRight,
+                    DialFace,
+                    isCur ? 7.8 : 7.0,
+                    isCur ? Brushes.White : (isNxt ? new SolidColorBrush(Color.FromRgb(180, 83, 9)) : AppDialogs.BodyBrush),
+                    dpi);
+                dc.DrawText(ft, new Point(pt.X - ft.Width / 2, pt.Y - ft.Height / 2));
+            }
+
+            var centerFt = new FormattedText(
+                $"{_cagedShape}形",
+                CultureInfo.CurrentUICulture,
+                FlowDirection.LeftToRight,
+                new Typeface(new FontFamily("Microsoft YaHei UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
+                9.5,
+                AppDialogs.AccentHoverBrush,
+                dpi);
+            dc.DrawText(centerFt, new Point(center.X - centerFt.Width / 2, center.Y - centerFt.Height / 2));
+        }
+    }
+
     private sealed class DrillTabSurface : FrameworkElement
     {
         private TabSection? _section;
         private TabPlayheadState _playhead = new();
         private readonly List<(int BarIndex, Rect Bounds)> _barBounds = [];
 
-        public event Action<int, bool>? BarClicked; // (barIndex, isShiftDown)
+        public event Action<int, bool>? BarClicked;
 
         public DrillTabSurface()
         {

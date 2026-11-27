@@ -101,7 +101,9 @@ public sealed class FretboardCanvas : FrameworkElement
     public FretboardLabelMode LabelMode { get; set; } = FretboardLabelMode.ScaleDegree;
     public bool DarkRosewood { get; set; } = false;
     public bool ShowCagedBoxes { get; set; } = true;
-    public string ActiveCagedFilter { get; set; } = "ALL"; // ALL / C / A / G / E / D / ""
+    public string ActiveCagedFilter { get; set; } = "ALL"; // ALL / C / A / E / G / D / ""
+    public bool ShowThreeNpsBoxes { get; set; } = false;
+    public int ActiveThreeNpsPosition { get; set; } = 0;   // 0 = ALL, 1..7 = Pos 1..7
     public bool ShowCapsules { get; set; } = false;
     public ChordShape? HighlightedChord { get; set; }
     public bool JamTargetColorMode { get; set; }
@@ -111,6 +113,7 @@ public sealed class FretboardCanvas : FrameworkElement
 
     public event Action<int, int, int>? FretClicked;          // (stringIndex 0..5, fret 0..17, midiNote)
     public event Action<string>? CagedBadgeClicked;           // ("C" | "A" | "G" | "E" | "D")
+    public event Action<int>? ThreeNpsBadgeClicked;           // (1..7)
 
     public FretboardCanvas()
     {
@@ -243,6 +246,27 @@ public sealed class FretboardCanvas : FrameworkElement
 
     public List<(int StringIdx, int Fret, int Midi)> GetActiveCagedOrScaleSpots()
     {
+        if (ShowThreeNpsBoxes)
+        {
+            var npsBoxes = MusicTheoryCatalog.ComputeThreeNpsBoxes(TonicPitch, Scale, Tuning, TotalFrets);
+            var targetNps = ActiveThreeNpsPosition > 0
+                ? npsBoxes.FirstOrDefault(b => b.PositionNumber == ActiveThreeNpsPosition && b.MinFret >= Capo)
+                : npsBoxes.FirstOrDefault(b => b.MinFret >= Capo);
+            if (targetNps is not null)
+            {
+                var npsSpots = new List<(int Str, int Fret, int Midi)>(18);
+                for (var s = 0; s < 6; s++)
+                {
+                    foreach (var f in targetNps.StringFrets[s])
+                    {
+                        if (f >= Capo && f <= TotalFrets)
+                            npsSpots.Add((s, f, Tuning.OpenMidi[s] + f));
+                    }
+                }
+                if (npsSpots.Count > 0) return npsSpots;
+            }
+        }
+
         var boxes = MusicTheoryCatalog.ComputeCagedBoxes(TonicPitch, Scale.IsMinorFamily, Tuning, TotalFrets);
         if (ShowCagedBoxes && !string.Equals(ActiveCagedFilter, "ALL", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(ActiveCagedFilter))
         {
@@ -552,8 +576,8 @@ public sealed class FretboardCanvas : FrameworkElement
                 new Point(_boardLeft + 2, y), new Point(_fretX[TotalFrets] - 1, y));
         }
 
-        // ─── 7. CAGED 5-Color Interlocking Outlines & Capsules ────────────────────
-        var cagedBoxes = ShowCagedBoxes
+        // ─── 7. CAGED 5-Color Interlocking Outlines OR 3NPS 7-Position Runways ────
+        var cagedBoxes = (ShowCagedBoxes && !ShowThreeNpsBoxes)
             ? MusicTheoryCatalog.ComputeCagedBoxes(TonicPitch, Scale.IsMinorFamily, Tuning, TotalFrets)
             : [];
         var visibleBoxes = cagedBoxes
@@ -562,13 +586,25 @@ public sealed class FretboardCanvas : FrameworkElement
                          string.Equals(b.ShapeLetter, ActiveCagedFilter, StringComparison.OrdinalIgnoreCase)))
             .ToList();
 
-        if (ShowCagedBoxes)
+        var threeNpsBoxes = ShowThreeNpsBoxes
+            ? MusicTheoryCatalog.ComputeThreeNpsBoxes(TonicPitch, Scale, Tuning, TotalFrets)
+            : [];
+        var visibleThreeNps = threeNpsBoxes
+            .Where(b => b.MaxFret >= Capo && (ActiveThreeNpsPosition == 0 || b.PositionNumber == ActiveThreeNpsPosition))
+            .ToList();
+
+        if (ShowThreeNpsBoxes)
+        {
+            foreach (var nps in visibleThreeNps)
+                DrawThreeNpsBoxOutline(dc, nps, isSingleFocused: ActiveThreeNpsPosition > 0);
+        }
+        else if (ShowCagedBoxes)
         {
             foreach (var box in visibleBoxes)
                 DrawCagedBoxOutline(dc, box, isSingleFocused: !string.Equals(ActiveCagedFilter, "ALL", StringComparison.OrdinalIgnoreCase));
         }
 
-        if (ShowCapsules)
+        if (ShowCapsules && !ShowThreeNpsBoxes)
         {
             foreach (var box in visibleBoxes)
                 DrawCagedCapsules(dc, box);
@@ -618,10 +654,26 @@ public sealed class FretboardCanvas : FrameworkElement
         }
 
         HashSet<(int Str, int Fret)>? focusedBoxNotes = null;
-        if (ShowCagedBoxes &&
-            !string.IsNullOrEmpty(ActiveCagedFilter) &&
-            !string.Equals(ActiveCagedFilter, "ALL", StringComparison.OrdinalIgnoreCase) &&
-            visibleBoxes.Count > 0)
+        if (ShowThreeNpsBoxes && ActiveThreeNpsPosition > 0 && visibleThreeNps.Count > 0)
+        {
+            focusedBoxNotes = [];
+            foreach (var nps in visibleThreeNps)
+            {
+                for (var s = 0; s < 6; s++)
+                {
+                    foreach (var f in nps.StringFrets[s])
+                    {
+                        if (f >= Capo && f <= TotalFrets)
+                            focusedBoxNotes.Add((s, f));
+                    }
+                }
+            }
+        }
+        else if (!ShowThreeNpsBoxes &&
+                 ShowCagedBoxes &&
+                 !string.IsNullOrEmpty(ActiveCagedFilter) &&
+                 !string.Equals(ActiveCagedFilter, "ALL", StringComparison.OrdinalIgnoreCase) &&
+                 visibleBoxes.Count > 0)
         {
             focusedBoxNotes = [];
             foreach (var box in visibleBoxes)
@@ -949,6 +1001,73 @@ public sealed class FretboardCanvas : FrameworkElement
         dc.DrawText(badgeFt, new Point(pillRect.Left + 8, pillRect.Top + (pillH - badgeFt.Height) / 2));
     }
 
+    private void DrawThreeNpsBoxOutline(DrawingContext dc, ThreeNpsBoxInstance box, bool isSingleFocused)
+    {
+        var color = (Color)ColorConverter.ConvertFromString(box.ColorHex);
+        var badgeKey = $"3NPS:{box.PositionNumber}";
+        var isHoveredBadge = string.Equals(_hoverBadgeLetter, badgeKey, StringComparison.OrdinalIgnoreCase);
+
+        var fillAlpha = isSingleFocused ? (byte)36 : (isHoveredBadge ? (byte)34 : (byte)14);
+        var strokeAlpha = isSingleFocused ? (byte)220 : (isHoveredBadge ? (byte)215 : (byte)125);
+        var strokeWidth = isSingleFocused || isHoveredBadge ? 2.4 : 1.5;
+
+        var fillBrush = new SolidColorBrush(Color.FromArgb(fillAlpha, color.R, color.G, color.B));
+        var strokePen = new Pen(new SolidColorBrush(Color.FromArgb(strokeAlpha, color.R, color.G, color.B)), strokeWidth)
+        {
+            LineJoin = PenLineJoin.Round
+        };
+
+        var halfBand = (_stringY[0] - _stringY[1]) * 0.44;
+        var geom = new StreamGeometry();
+        using (var ctx = geom.Open())
+        {
+            var first = true;
+            for (var s = 5; s >= 0; s--)
+            {
+                var rx = GetFretCenterX(Math.Clamp(box.RightFrets[s], 0, TotalFrets)) + 13.5;
+                var yTop = _stringY[s] - halfBand;
+                var yBot = _stringY[s] + halfBand;
+                if (first)
+                {
+                    ctx.BeginFigure(new Point(rx, yTop), isFilled: true, isClosed: true);
+                    first = false;
+                }
+                else
+                {
+                    ctx.LineTo(new Point(rx, yTop), true, true);
+                }
+                ctx.LineTo(new Point(rx, yBot), true, true);
+            }
+
+            for (var s = 0; s <= 5; s++)
+            {
+                var lx = GetFretCenterX(Math.Clamp(box.LeftFrets[s], 0, TotalFrets)) - 13.5;
+                var yBot = _stringY[s] + halfBand;
+                var yTop = _stringY[s] - halfBand;
+                ctx.LineTo(new Point(lx, yBot), true, true);
+                ctx.LineTo(new Point(lx, yTop), true, true);
+            }
+        }
+        geom.Freeze();
+        dc.DrawGeometry(fillBrush, strokePen, geom);
+
+        var anchorX = (GetFretCenterX(Math.Clamp(box.LeftFrets[0], 0, TotalFrets)) + GetFretCenterX(Math.Clamp(box.RightFrets[5], 0, TotalFrets))) / 2.0;
+        var label = isSingleFocused ? $"{box.PositionNumber}把 · {box.DegreeStartLabel}" : $"{box.PositionNumber}把";
+        var badgeFt = CreateText(label, 10.2, DotTypeface, Brushes.White);
+        var pillW = badgeFt.Width + 14;
+        var pillH = isHoveredBadge || isSingleFocused ? 20.5 : 18.5;
+        var pillRect = new Rect(anchorX - pillW / 2, _boardTop - 27 - (pillH - 18.5) / 2, pillW, pillH);
+
+        _badgeRegions.Add(new BadgeHitRegion(badgeKey, pillRect));
+        dc.DrawRoundedRectangle(
+            new SolidColorBrush(color),
+            isSingleFocused || isHoveredBadge ? new Pen(Brushes.White, 1.4) : null,
+            pillRect,
+            9.5,
+            9.5);
+        dc.DrawText(badgeFt, new Point(pillRect.Left + 7, pillRect.Top + (pillH - badgeFt.Height) / 2));
+    }
+
     private void DrawCagedCapsules(DrawingContext dc, CagedBoxInstance box)
     {
         var color = (Color)ColorConverter.ConvertFromString(box.ColorHex);
@@ -1067,7 +1186,15 @@ public sealed class FretboardCanvas : FrameworkElement
 
         if (HitTestBadge(pos) is { } badgeLetter)
         {
-            CagedBadgeClicked?.Invoke(badgeLetter);
+            if (badgeLetter.StartsWith("3NPS:", StringComparison.Ordinal) &&
+                int.TryParse(badgeLetter.AsSpan(5), out var npsPos))
+            {
+                ThreeNpsBadgeClicked?.Invoke(npsPos);
+            }
+            else
+            {
+                CagedBadgeClicked?.Invoke(badgeLetter);
+            }
             e.Handled = true;
             return;
         }

@@ -27,11 +27,12 @@ StringNote/
 │   ├── LyricLineEditHelper.cs   # 谱面原位改词与断句时的和弦字位跟随平移、叠行同步切分算法
 │   ├── ChordCatalog.cs          # 各调常用和弦、开放/横按指法库、候选把位集合与按调自定义和弦持久化
 │   ├── ChordVoicingEngine.cs    # 零依赖乐理和弦解析与吉他指板人体工学把位推导引擎（支持任意延伸/变化/转位和弦自动出图）
-│   ├── MusicTheoryCatalog.cs    # 乐理指板核心引擎：9 种调弦、21 种音阶、CAGED 五色拼图/每弦两音计算、自然音阶和弦解剖、进行预设与语音连接/色彩丰富推荐、8 节互动乐理课
+│   ├── MusicTheoryCatalog.cs    # 乐理指板核心引擎：9 种调弦、21 种音阶、CAGED 五色拼图/3NPS 七把位计算、和弦解剖、进行推荐、8 大单元 24 节渐进式互动乐理与扒谱课（含 AB 对比试听与指板点按闯关）
 │   ├── GuitarAudioService.cs    # 零依赖 Karplus-Strong 物理建模原声吉他拨弦合成器（支持单音、扫弦、分解与音阶上行试听）
 │   ├── FretboardCanvas.cs       # 0–17 品全景 2D 矢量交互指板（枫木/玫瑰木、变调夹、CAGED 五色拼图框、双音胶囊、靶向音染色、跟练下一音预判轨迹箭头与重音光环）
-│   ├── ScaleDrillCatalog.cs     # 指板练功房核心算法引擎：29 套渐进训练（爬格子、三/四/五音模进、3对4与反拍重音移位、3–6度正反向跳音、顺阶三/七和弦交替琶音、同一把位五度圈）
-│   ├── ScaleDrillStageView.cs   # 「⚡ 指板练功房」互动跟练台（预备拍倒数、动态游标 TAB 六线谱、A–B 小节循环、2&4反拍节拍器、阶梯提速、BPM 打卡与练习谱导出）
+│   ├── ScaleDrillCatalog.cs     # 指板练功房核心算法引擎：32 套渐进训练（爬格子、跨把位滑音高速路、模进与重音移位、3–6度跳音、顺阶琶音、自选把位 5/12 调五度圈）
+│   ├── ScaleDrillStageView.cs   # 「⚡ 指板练功房」互动跟练台（每日 15m 连播日课、五度圈转盘 HUD、BPM 成长折线轨迹、动态游标 TAB、A–B 循环与练习册打印）
+│   ├── DrillWorkbookDialog.cs   # 多课合集指板练习册 A4 防断行分页打印 / PDF / 长图导出弹窗
 │   ├── TheoryStudioView.cs      # 「🎼 乐理指板」第三工作模式主视图（互动 CAGED 课 / 和弦解剖库 / 和弦进行与靶向音 / 指板练功房 / 我的乐理收集本）
 │   ├── ChordDiagramView.cs      # 六弦和弦指法图渲染组件
 │   ├── ChordTranspose.cs        # 全谱半音升降调与按调名批量移调逻辑

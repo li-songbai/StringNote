@@ -28,6 +28,9 @@ public enum DrillPatternKind
 {
     Spider1234,
     Spider1324,
+    SlideHighwayMajorPent,
+    SlideHighwayMinorPent,
+    SlideHighwayMajor,
     ScaleUpDown,
     Seq3,
     Seq4,
@@ -106,9 +109,18 @@ public static class ScaleDrillCatalog
         new("u1_box_pent", "1. 把位与热身地基", "12", "五声音阶单把位顺爬（每弦两音）",
             "先在单个 CAGED 把位内把根音（橙色大圆）位置烙进肌肉记忆，换把不迷路。",
             "major_pent", DrillPatternKind.ScaleUpDown, DrillSubdivision.Eighth, DrillAccentMode.BeatDownbeat, DrillPositionMode.FollowCaged, 88),
+        new("u1_slide_mpent", "1. 把位与热身地基", "15", "小调五声 · 全指板对角线滑音高速公路",
+            "【跨把位串联】每根弦弹 2 音后直接顺势向高把位滑音 (s) 2 品切入下一把位，一口气从低把位纵贯到高把位！",
+            "minor_pent", DrillPatternKind.SlideHighwayMinorPent, DrillSubdivision.Eighth, DrillAccentMode.BeatDownbeat, DrillPositionMode.FollowCaged, 84),
+        new("u1_slide_majpent", "1. 把位与热身地基", "16", "大调五声 · 跨三把位甜蜜滑音串联",
+            "民谣与乡村 Solo 最常用连接线：利用 6→5→4→3→2→1 弦经典 2–3 度无名指滑音无缝横穿三个 CAGED 把位。",
+            "major_pent", DrillPatternKind.SlideHighwayMajorPent, DrillSubdivision.Eighth, DrillAccentMode.BeatDownbeat, DrillPositionMode.FollowCaged, 86),
         new("u1_3nps_major", "1. 把位与热身地基", "18", "自然大调 · 每弦三音 (3NPS) 速弹地基",
-            "每根弦严格 3 个音，跨弦拨弦规律完全对称，是高速连奏与模进的最佳跑道。",
+            "每根弦严格 3 个音，跨弦拨弦规律完全对称，可在上方指板切换 1～7 把位逐一攻克。",
             "major", DrillPatternKind.ScaleUpDown, DrillSubdivision.Triplet, DrillAccentMode.BeatDownbeat, DrillPositionMode.ThreeNotesPerString, 84),
+        new("u1_slide_major", "1. 把位与热身地基", "22", "自然大调 · 跨把位斜向滑音长线条",
+            "每弦弹 3 音并在换把点加入食指/无名指滑音推进，彻底消除把位盒子的边界感。",
+            "major", DrillPatternKind.SlideHighwayMajor, DrillSubdivision.Triplet, DrillAccentMode.BeatDownbeat, DrillPositionMode.ThreeNotesPerString, 80),
 
         // ─── Unit 2: 音阶模进与重音移位 (26–39 课) ──────────────────────────
         new("u2_26_pent_seq3", "2. 模进与重音移位", "26", "三音模进 · 大调五声音阶（一）",
@@ -209,7 +221,11 @@ public static class ScaleDrillCatalog
         DrillPositionMode posMode,
         DrillPatternKind pattern,
         DrillSubdivision subdivision,
-        DrillAccentMode accentMode)
+        DrillAccentMode accentMode,
+        int fixedWindowStartFret = 5,
+        int cofKeyCount = 5,
+        int cofBarsPerKey = 2,
+        int threeNpsPosition = 1)
     {
         var notesPerBeat = (int)subdivision;
         var colsPerBar = notesPerBeat * 4; // 4/4 time: 8, 12, or 16 columns
@@ -218,19 +234,27 @@ public static class ScaleDrillCatalog
         // Special multi-key Circle-of-Fifths / Fourths in fixed position (Lessons 58–60)
         if (pattern is DrillPatternKind.CircleOf4thsPentatonic or DrillPatternKind.CircleOf4thsMajor or DrillPatternKind.CircleOf5thsPentatonic)
         {
-            return GenerateCircleOfFifthsInPosition(tonicPitch, tuning, capo, pattern, subdivision, accentMode, colsPerBar, colDuration);
+            return GenerateCircleOfFifthsInPosition(
+                tonicPitch, tuning, capo, pattern, subdivision, accentMode, colsPerBar, colDuration,
+                fixedWindowStartFret, cofKeyCount, cofBarsPerKey);
+        }
+
+        // Cross-position Diagonal Sliding Highway Drills (Lessons 15, 16, 22)
+        if (pattern is DrillPatternKind.SlideHighwayMinorPent or DrillPatternKind.SlideHighwayMajorPent or DrillPatternKind.SlideHighwayMajor)
+        {
+            return GenerateSlideHighwayDrill(tonicPitch, tuning, capo, pattern, subdivision, accentMode, colsPerBar, colDuration);
         }
 
         // Chromatic Spider Drills
         if (pattern is DrillPatternKind.Spider1234 or DrillPatternKind.Spider1324)
         {
-            return GenerateSpiderDrill(tuning, capo, activeCagedFilter, posMode, pattern, subdivision, accentMode, colsPerBar, colDuration);
+            return GenerateSpiderDrill(tuning, capo, activeCagedFilter, posMode, pattern, subdivision, accentMode, colsPerBar, colDuration, fixedWindowStartFret);
         }
 
-        var (spots, resolvedCagedLetter, posDesc) = ExtractPositionScaleSpots(tonicPitch, scale, tuning, capo, posMode, activeCagedFilter);
+        var (spots, resolvedCagedLetter, posDesc) = ExtractPositionScaleSpots(tonicPitch, scale, tuning, capo, posMode, activeCagedFilter, fixedWindowStartFret, threeNpsPosition);
         if (spots.Count < 4)
         {
-            spots = ExtractPositionScaleSpots(tonicPitch, scale, tuning, capo, DrillPositionMode.FixedWindow5To8, "ALL").Spots;
+            spots = ExtractPositionScaleSpots(tonicPitch, scale, tuning, capo, DrillPositionMode.FixedWindow5To8, "ALL", fixedWindowStartFret, threeNpsPosition).Spots;
         }
 
         var rawSequence = BuildPatternSequence(spots, tonicPitch, scale, pattern);
@@ -250,6 +274,129 @@ public static class ScaleDrillCatalog
             accentMode);
     }
 
+    private static GeneratedScaleDrill GenerateSlideHighwayDrill(
+        int tonicPitch,
+        GuitarTuning tuning,
+        int capo,
+        DrillPatternKind pattern,
+        DrillSubdivision subdivision,
+        DrillAccentMode accentMode,
+        int colsPerBar,
+        TabDuration colDuration)
+    {
+        var scaleId = pattern switch
+        {
+            DrillPatternKind.SlideHighwayMinorPent => "minor_pent",
+            DrillPatternKind.SlideHighwayMajorPent => "major_pent",
+            _ => "major"
+        };
+        var effScale = MusicTheoryCatalog.GetScale(scaleId);
+        var pcSet = new HashSet<int>(effScale.Intervals.Select(iv => ((tonicPitch + iv) % 12 + 12) % 12));
+
+        // Walk diagonally from string 0 (low 6E) up to string 5 (high 1e), sliding up 1 scale note on key strings!
+        var steps = new List<(int Str, int Fret, int Midi, bool SlideToNext, string? Tag)>();
+        var lastMidi = -1;
+        var minStartFret = capo;
+
+        for (var s = 0; s < 6; s++)
+        {
+            var strNotes = new List<(int Fret, int Midi)>();
+            for (var f = minStartFret; f <= FretboardCanvas.TotalFrets; f++)
+            {
+                var midi = tuning.OpenMidi[s] + f;
+                if (midi <= lastMidi) continue;
+                if (!pcSet.Contains(((midi % 12) + 12) % 12)) continue;
+                strNotes.Add((f, midi));
+                if (strNotes.Count == 3) break; // 2 base notes + 1 slide-up target note on the same string!
+            }
+
+            if (strNotes.Count == 0) continue;
+            for (var k = 0; k < strNotes.Count; k++)
+            {
+                var slide = strNotes.Count >= 3 && k == 1; // Slide from 2nd note up to 3rd note on the same string!
+                var tag = s == 0 && k == 0 ? "跨把滑音上行" : (slide ? "滑把 (s)" : null);
+                steps.Add((s, strNotes[k].Fret, strNotes[k].Midi, slide, tag));
+                lastMidi = strNotes[k].Midi;
+            }
+
+            if (strNotes.Count >= 3)
+                minStartFret = Math.Max(capo, strNotes[1].Fret - 1);
+        }
+
+        // Add smooth descending return down the diagonal highway
+        var upCount = steps.Count;
+        for (var i = upCount - 2; i >= 1; i--)
+        {
+            var cur = steps[i];
+            var nxt = steps[i - 1];
+            var slideBack = cur.Str == nxt.Str && Math.Abs(cur.Fret - nxt.Fret) >= 2 && (upCount - i) % 3 == 0;
+            steps.Add((cur.Str, cur.Fret, cur.Midi, slideBack, i == upCount - 2 ? "斜向滑回低把" : null));
+        }
+
+        var notesPerBeat = (int)subdivision;
+        var bars = new List<TabBar>();
+        var events = new List<DrillStepEvent>(steps.Count);
+
+        for (var i = 0; i < steps.Count; i++)
+        {
+            var barIdx = i / colsPerBar;
+            var col = i % colsPerBar;
+            if (col == 0)
+                bars.Add(new TabBar { ColumnCount = colsPerBar });
+
+            var bar = bars[barIdx];
+            var item = steps[i];
+            var isAccent = ComputeIsAccent(accentMode, col, i, notesPerBeat);
+            if (!string.IsNullOrWhiteSpace(item.Tag))
+                bar.ChordMarks.Add(new TabChordMark { Column = col, Text = item.Tag! });
+
+            bar.Notes.Add(new TabNote
+            {
+                Column = col,
+                StringIndex = 5 - item.Str,
+                Fret = item.Fret.ToString(),
+                LinkToNext = item.SlideToNext ? TabLinkKind.Slide : TabLinkKind.None
+            });
+            bar.ColumnMetas.Add(new TabColumnMeta
+            {
+                Column = col,
+                Duration = colDuration,
+                Accent = isAccent,
+                TupletGroup = subdivision == DrillSubdivision.Triplet ? 3 : 0
+            });
+
+            events.Add(new DrillStepEvent(
+                StepIndex: i,
+                BarIndex: barIdx,
+                Column: col,
+                StringIdx: item.Str,
+                Fret: item.Fret,
+                Midi: item.Midi,
+                IsAccent: isAccent,
+                IsBeatStart: col % notesPerBeat == 0,
+                IsBarDownbeat: col == 0,
+                EffectiveTonicPitch: tonicPitch,
+                EffectiveCagedLetter: "ALL",
+                KeyBannerText: null,
+                NextKeyPreviewText: null));
+        }
+
+        var pf = MusicTheoryCatalog.PreferFlatsForTonic(tonicPitch);
+        var minF = steps.Count > 0 ? steps.Min(x => x.Fret) : capo;
+        var maxF = steps.Count > 0 ? steps.Max(x => x.Fret) : capo + 10;
+        var sec = new TabSection
+        {
+            Kind = TabSectionKind.Interlude,
+            Title = $"{MusicTheoryCatalog.NoteName(tonicPitch, pf)} {effScale.Name} · 跨把位滑音直通车 ({minF}–{maxF}品)",
+            TimeSignature = "4/4",
+            ColumnsPerBar = colsPerBar,
+            ShowRhythmStems = true,
+            Bars = bars
+        };
+
+        return new GeneratedScaleDrill(sec.Title, $"横向贯通 {minF}–{maxF} 品（含同弦滑音换把 s）", sec, events, notesPerBeat);
+    }
+
     private static GeneratedScaleDrill GenerateSpiderDrill(
         GuitarTuning tuning,
         int capo,
@@ -259,9 +406,10 @@ public static class ScaleDrillCatalog
         DrillSubdivision subdivision,
         DrillAccentMode accentMode,
         int colsPerBar,
-        TabDuration colDuration)
+        TabDuration colDuration,
+        int fixedWindowStartFret = 5)
     {
-        var baseFret = Math.Max(capo + 1, 5);
+        var baseFret = Math.Max(capo + 1, fixedWindowStartFret);
         if (posMode == DrillPositionMode.FollowCaged && !string.Equals(activeCagedFilter, "ALL", StringComparison.OrdinalIgnoreCase))
         {
             var boxes = MusicTheoryCatalog.ComputeCagedBoxes(0, false, tuning, FretboardCanvas.TotalFrets);
@@ -312,11 +460,14 @@ public static class ScaleDrillCatalog
         DrillSubdivision subdivision,
         DrillAccentMode accentMode,
         int colsPerBar,
-        TabDuration colDuration)
+        TabDuration colDuration,
+        int fixedWindowStartFret = 5,
+        int cofKeyCount = 5,
+        int cofBarsPerKey = 2)
     {
         var stepSemitones = pattern == DrillPatternKind.CircleOf5thsPentatonic ? 7 : 5; // +5 semitones = up a 4th (CCW Circle of 5ths: C->F->Bb->Eb->Ab)
         var targetScale = MusicTheoryCatalog.GetScale(pattern == DrillPatternKind.CircleOf4thsMajor ? "major" : "major_pent");
-        var winMin = Math.Max(capo, 5);
+        var winMin = Math.Clamp(Math.Max(capo, fixedWindowStartFret), 0, 12);
         var winMax = Math.Min(FretboardCanvas.TotalFrets, winMin + 3);
 
         var bars = new List<TabBar>();
@@ -324,8 +475,8 @@ public static class ScaleDrillCatalog
         var notesPerBeat = (int)subdivision;
         var globalIdx = 0;
 
-        // 5 keys along the Circle of 4ths/5ths cover all 5 CAGED shapes in the exact same 4-fret window!
-        const int keyCount = 5;
+        var keyCount = Math.Clamp(cofKeyCount, 2, 12);
+        var barsPerKey = Math.Clamp(cofBarsPerKey, 1, 4);
         var keyInfos = new List<(int Tonic, string KeyName, string CagedLetter, string RootHint)>(keyCount + 1);
         for (var k = 0; k <= keyCount; k++)
         {
@@ -362,8 +513,7 @@ public static class ScaleDrillCatalog
             var spots = ExtractFixedWindowSpots(cur.Tonic, targetScale, tuning, winMin, winMax);
             if (spots.Count == 0) continue;
 
-            // Build a musical ascending + descending phrase filling exact 2 bars (2 * colsPerBar notes)
-            var targetLen = colsPerBar * 2;
+            var targetLen = colsPerBar * barsPerKey;
             var cycle = new List<(int Str, int Fret, int Midi)>(spots);
             for (var i = spots.Count - 2; i >= 1; i--)
                 cycle.Add(spots[i]);
@@ -372,12 +522,12 @@ public static class ScaleDrillCatalog
             for (var n = 0; n < targetLen; n++)
                 keyNotes.Add(cycle[n % cycle.Count]);
 
-            for (var b = 0; b < 2; b++)
+            for (var b = 0; b < barsPerKey; b++)
             {
                 var barIdx = bars.Count;
                 var bar = new TabBar { ColumnCount = colsPerBar };
                 if (b == 0)
-                    bar.ChordMarks.Add(new TabChordMark { Column = 0, Text = $"{cur.KeyName} [{cur.CagedLetter}形]" });
+                    bar.ChordMarks.Add(new TabChordMark { Column = 0, Text = $"#{k + 1} {cur.KeyName} [{cur.CagedLetter}形]" });
 
                 for (var col = 0; col < colsPerBar; col++)
                 {
@@ -429,7 +579,7 @@ public static class ScaleDrillCatalog
 
         return new GeneratedScaleDrill(
             sec.Title,
-            $"连续 5 调不移把 · 依次轮转 {string.Join(" → ", keyInfos.Take(keyCount).Select(x => $"{x.KeyName}({x.CagedLetter}形)"))}",
+            $"连续 {keyCount} 调 · 每调 {barsPerKey} 小节 · {string.Join(" → ", keyInfos.Take(Math.Min(6, keyCount)).Select(x => $"{x.KeyName}({x.CagedLetter}形)"))}{(keyCount > 6 ? " …" : "")}",
             sec,
             events,
             notesPerBeat);
@@ -441,17 +591,32 @@ public static class ScaleDrillCatalog
         GuitarTuning tuning,
         int capo,
         DrillPositionMode posMode,
-        string activeCagedFilter)
+        string activeCagedFilter,
+        int fixedWindowStartFret = 5,
+        int threeNpsPosition = 1)
     {
         if (posMode == DrillPositionMode.FixedWindow5To8)
         {
-            var winMin = Math.Max(capo, 5);
+            var winMin = Math.Clamp(Math.Max(capo, fixedWindowStartFret), 0, 12);
             var winMax = Math.Min(FretboardCanvas.TotalFrets, winMin + 3);
             return (ExtractFixedWindowSpots(tonicPitch, scale, tuning, winMin, winMax), "ALL", $"固定把位 {winMin}–{winMax} 品");
         }
 
-        if (posMode == DrillPositionMode.ThreeNotesPerString && scale.Intervals.Length >= 7)
+        if (posMode == DrillPositionMode.ThreeNotesPerString)
         {
+            var boxes3 = MusicTheoryCatalog.ComputeThreeNpsBoxes(tonicPitch, scale, tuning, FretboardCanvas.TotalFrets);
+            var target3 = boxes3.FirstOrDefault(b => b.PositionNumber == threeNpsPosition && b.MinFret >= capo)
+                          ?? boxes3.FirstOrDefault(b => b.MinFret >= capo);
+            if (target3 is not null)
+            {
+                var list3 = new List<(int Str, int Fret, int Midi)>(18);
+                for (var s = 0; s < 6; s++)
+                {
+                    foreach (var f in target3.StringFrets[s])
+                        list3.Add((s, f, tuning.OpenMidi[s] + f));
+                }
+                return (list3, "ALL", $"3NPS 第 {target3.PositionNumber} 把位 ({target3.MinFret}–{target3.MaxFret}品)");
+            }
             var spots3 = ExtractThreeNotesPerStringSpots(tonicPitch, scale, tuning, capo);
             if (spots3.Count >= 12)
                 return (spots3, "ALL", "每弦三音 (3NPS)");
