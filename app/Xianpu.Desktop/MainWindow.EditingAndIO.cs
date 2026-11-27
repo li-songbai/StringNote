@@ -28,6 +28,8 @@ public partial class MainWindow
         if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } files && File.Exists(files[0]))
         {
             LoadFromFilePath(files[0]);
+            if (_vm.IsTheoryMode || _vm.IsPracticeMode)
+                _vm.EnterEditModeCommand.Execute(null);
             e.Handled = true;
         }
     }

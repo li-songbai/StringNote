@@ -169,21 +169,23 @@
                             </StackPanel>
                         </ToggleButton>
 
-                        <Border Width="1" Height="18" Background="#E2E8F0" Margin="2,0,6,0" />
+                        <StackPanel x:Name="TopEditLeftActions" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border Width="1" Height="18" Background="#E2E8F0" Margin="2,0,6,0" />
 
-                        <Button x:Name="ImportMenuButton" Content="+ 导入 ▾" Style="{StaticResource AccentOutlineButton}"
-                                WindowChrome.IsHitTestVisibleInChrome="True"
-                                Padding="10,4" Margin="0,0,4,0" Click="ImportMenu_Click"
-                                ToolTip="导入 LRC/文本、AI 识谱导入、导入好友谱子或新建空白曲谱" />
+                            <Button x:Name="ImportMenuButton" Content="+ 导入 ▾" Style="{StaticResource AccentOutlineButton}"
+                                    WindowChrome.IsHitTestVisibleInChrome="True"
+                                    Padding="10,4" Margin="0,0,4,0" Click="ImportMenu_Click"
+                                    ToolTip="导入 LRC/文本、AI 识谱导入、导入好友谱子或新建空白曲谱" />
 
-                        <Button x:Name="UndoButton" Content="↩" Style="{StaticResource TopBarGhostButton}"
-                                WindowChrome.IsHitTestVisibleInChrome="True"
-                                Padding="7,4" Margin="0,0,2,0" FontSize="13"
-                                Command="{Binding UndoCommand}" ToolTip="{Binding UndoToolTip}" />
-                        <Button x:Name="RedoButton" Content="↪" Style="{StaticResource TopBarGhostButton}"
-                                WindowChrome.IsHitTestVisibleInChrome="True"
-                                Padding="7,4" Margin="0,0,4,0" FontSize="13"
-                                Command="{Binding RedoCommand}" ToolTip="{Binding RedoToolTip}" />
+                            <Button x:Name="UndoButton" Content="↩" Style="{StaticResource TopBarGhostButton}"
+                                    WindowChrome.IsHitTestVisibleInChrome="True"
+                                    Padding="7,4" Margin="0,0,2,0" FontSize="13"
+                                    Command="{Binding UndoCommand}" ToolTip="{Binding UndoToolTip}" />
+                            <Button x:Name="RedoButton" Content="↪" Style="{StaticResource TopBarGhostButton}"
+                                    WindowChrome.IsHitTestVisibleInChrome="True"
+                                    Padding="7,4" Margin="0,0,4,0" FontSize="13"
+                                    Command="{Binding RedoCommand}" ToolTip="{Binding RedoToolTip}" />
+                        </StackPanel>
 
                         <TextBlock x:Name="CaptionSongTitle" Text="{Binding CaptionSongTitle}"
                                    FontSize="11.5" Foreground="#94A3B8" VerticalAlignment="Center"
@@ -211,19 +213,23 @@
 
                     <!-- Right: Arrange Menu + Save + Export Menu + Settings + Window Controls -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                        <Button x:Name="PartArrangeButton" Content="编排 ▾" Style="{StaticResource TopBarGhostButton}"
-                                WindowChrome.IsHitTestVisibleInChrome="True"
-                                Margin="0,0,2,0" Click="ArrangeMenu_Click"
-                                ToolTip="编辑歌词、段落编排与叠行、排版模式、和弦操作" />
-                        <Button Content="保存" Style="{StaticResource TopBarGhostButton}"
-                                WindowChrome.IsHitTestVisibleInChrome="True"
-                                Margin="0,0,4,0" Click="SaveToLibrary_Click" ToolTip="保存当前曲谱到本地曲库" />
-                        <Button x:Name="ExportMenuButton" Content="导出 ▾" Style="{StaticResource PrimaryButton}"
-                                WindowChrome.IsHitTestVisibleInChrome="True"
-                                Padding="11,4" Margin="0,0,6,0" Click="ExportMenu_Click"
-                                ToolTip="导出高清 PNG、A4 打印/PDF 或 .xianpu.json 分享" />
+                        <StackPanel x:Name="TopEditRightActions" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="PartArrangeButton" Content="编排 ▾" Style="{StaticResource TopBarGhostButton}"
+                                    WindowChrome.IsHitTestVisibleInChrome="True"
+                                    Margin="0,0,2,0" Click="ArrangeMenu_Click"
+                                    ToolTip="编辑歌词、段落编排与叠行、排版模式、和弦操作" />
+                            <Button Content="保存" Style="{StaticResource TopBarGhostButton}"
+                                    WindowChrome.IsHitTestVisibleInChrome="True"
+                                    Margin="0,0,4,0" Click="SaveToLibrary_Click" ToolTip="保存当前曲谱到本地曲库" />
+                        </StackPanel>
+                        <StackPanel x:Name="TopScoreExportActions" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="ExportMenuButton" Content="导出 ▾" Style="{StaticResource PrimaryButton}"
+                                    WindowChrome.IsHitTestVisibleInChrome="True"
+                                    Padding="11,4" Margin="0,0,6,0" Click="ExportMenu_Click"
+                                    ToolTip="导出高清 PNG、A4 打印/PDF 或 .xianpu.json 分享" />
 
-                        <Border Width="1" Height="18" Background="#E2E8F0" Margin="0,0,4,0" />
+                            <Border Width="1" Height="18" Background="#E2E8F0" Margin="0,0,4,0" />
+                        </StackPanel>
 
                         <Button x:Name="SettingsButton" Content="⚙" Style="{StaticResource TopBarGhostButton}"
                                 WindowChrome.IsHitTestVisibleInChrome="True"
@@ -653,38 +659,41 @@
             <Border Grid.Row="2" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="0,1,0,0" Padding="12,4">
                 <DockPanel LastChildFill="True">
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
-                        <!-- Practice: Auto-Scroll -->
-                        <ToggleButton x:Name="AutoScrollToggle" Content="{Binding Practice.AutoScrollButtonText}" Padding="7,2" FontSize="11" Margin="0,0,4,0"
-                                      Checked="AutoScrollToggle_Changed" Unchecked="AutoScrollToggle_Changed"
-                                      ToolTip="开启/暂停自动滚屏看谱（滚屏激活时按 Space 空格键可随时暂停/继续）" />
-                        <ComboBox x:Name="AutoScrollSpeedBox" Width="54" FontSize="11" Padding="4,1" Margin="0,0,8,0"
-                                  SelectedIndex="2" SelectedValuePath="Tag"
-                                  ToolTip="调整自动滚屏速度">
-                            <ComboBoxItem Content="极慢" Tag="14" />
-                            <ComboBoxItem Content="慢速" Tag="24" />
-                            <ComboBoxItem Content="中速" Tag="38" />
-                            <ComboBoxItem Content="较快" Tag="54" />
-                            <ComboBoxItem Content="快速" Tag="74" />
-                        </ComboBox>
+                        <!-- Practice-Only Controls (Shown ONLY in Practice Mode: Auto-Scroll & Score Metronome) -->
+                        <StackPanel x:Name="BottomPracticeControls" Orientation="Horizontal" VerticalAlignment="Center" Visibility="Collapsed">
+                            <ToggleButton x:Name="AutoScrollToggle" Content="{Binding Practice.AutoScrollButtonText}" Padding="7,2" FontSize="11" Margin="0,0,4,0"
+                                          Checked="AutoScrollToggle_Changed" Unchecked="AutoScrollToggle_Changed"
+                                          ToolTip="开启/暂停自动滚屏看谱（滚屏激活时按 Space 空格键可随时暂停/继续）" />
+                            <ComboBox x:Name="AutoScrollSpeedBox" Width="54" FontSize="11" Padding="4,1" Margin="0,0,8,0"
+                                      SelectedIndex="2" SelectedValuePath="Tag"
+                                      ToolTip="调整自动滚屏速度">
+                                <ComboBoxItem Content="极慢" Tag="14" />
+                                <ComboBoxItem Content="慢速" Tag="24" />
+                                <ComboBoxItem Content="中速" Tag="38" />
+                                <ComboBoxItem Content="较快" Tag="54" />
+                                <ComboBoxItem Content="快速" Tag="74" />
+                            </ComboBox>
 
-                        <Border Width="1" Height="14" Background="#CBD5E1" Margin="0,0,8,0" />
+                            <Border Width="1" Height="14" Background="#CBD5E1" Margin="0,0,8,0" />
 
-                        <!-- Practice: Metronome -->
-                        <ToggleButton x:Name="MetronomeToggle" Content="{Binding Practice.MetronomeButtonText}" Padding="7,2" FontSize="11" Margin="0,0,4,0"
-                                      Checked="MetronomeToggle_Changed" Unchecked="MetronomeToggle_Changed"
-                                      ToolTip="开启/关闭内置节拍器（自动使用谱头 BPM，未填时默认 80 BPM）" />
-                        <Button x:Name="MetronomeMeterButton" Content="{Binding Practice.MetronomeMeterLabel}" Padding="6,2" FontSize="11" Margin="0,0,4,0"
-                                Click="MetronomeMeter_Click" ToolTip="点击切换节拍器拍号（4/4 / 3/4 / 6/8）" />
-                        <TextBlock x:Name="MetronomeBeatText" Text="{Binding Practice.MetronomeBeatText}" FontSize="11" FontWeight="Bold" Foreground="#2F6B48"
-                                   VerticalAlignment="Center" MinWidth="28" Margin="0,0,8,0" />
+                            <ToggleButton x:Name="MetronomeToggle" Content="{Binding Practice.MetronomeButtonText}" Padding="7,2" FontSize="11" Margin="0,0,4,0"
+                                          Checked="MetronomeToggle_Changed" Unchecked="MetronomeToggle_Changed"
+                                          ToolTip="开启/关闭内置节拍器（自动使用谱头 BPM，未填时默认 80 BPM）" />
+                            <Button x:Name="MetronomeMeterButton" Content="{Binding Practice.MetronomeMeterLabel}" Padding="6,2" FontSize="11" Margin="0,0,4,0"
+                                    Click="MetronomeMeter_Click" ToolTip="点击切换节拍器拍号（4/4 / 3/4 / 6/8）" />
+                            <TextBlock x:Name="MetronomeBeatText" Text="{Binding Practice.MetronomeBeatText}" FontSize="11" FontWeight="Bold" Foreground="#2F6B48"
+                                       VerticalAlignment="Center" MinWidth="28" Margin="0,0,8,0" />
 
-                        <Border Width="1" Height="14" Background="#CBD5E1" Margin="0,0,8,0" />
+                            <Border Width="1" Height="14" Background="#CBD5E1" Margin="0,0,8,0" />
+                        </StackPanel>
 
-                        <!-- Zoom -->
-                        <Button Content="-" Padding="7,1" FontSize="12" Margin="0,0,4,0" Click="ZoomOut_Click" ToolTip="缩小谱面 (Ctrl + 滚轮向下)" />
-                        <TextBlock x:Name="ZoomPercentText" Text="{Binding Practice.ZoomPercentText}" FontSize="11" FontWeight="SemiBold" Foreground="#334155" VerticalAlignment="Center" MinWidth="54" TextAlignment="Center" />
-                        <Button Content="+" Padding="7,1" FontSize="12" Margin="4,0,6,0" Click="ZoomIn_Click" ToolTip="放大谱面 (Ctrl + 滚轮向上)" />
-                        <Button Content="适应" Padding="7,2" FontSize="11" Click="ZoomFit_Click" ToolTip="自动缩放以完整适应当前窗口宽度" />
+                        <!-- Score Sheet Zoom Controls (Shown in Edit & Practice Modes; Hidden in Theory Mode) -->
+                        <StackPanel x:Name="BottomZoomControls" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Content="-" Padding="7,1" FontSize="12" Margin="0,0,4,0" Click="ZoomOut_Click" ToolTip="缩小谱面 (Ctrl + 滚轮向下)" />
+                            <TextBlock x:Name="ZoomPercentText" Text="{Binding Practice.ZoomPercentText}" FontSize="11" FontWeight="SemiBold" Foreground="#334155" VerticalAlignment="Center" MinWidth="54" TextAlignment="Center" />
+                            <Button Content="+" Padding="7,1" FontSize="12" Margin="4,0,6,0" Click="ZoomIn_Click" ToolTip="放大谱面 (Ctrl + 滚轮向上)" />
+                            <Button Content="适应" Padding="7,2" FontSize="11" Click="ZoomFit_Click" ToolTip="自动缩放以完整适应当前窗口宽度" />
+                        </StackPanel>
                     </StackPanel>
                     <TextBlock x:Name="StatusText"
                                Text="{Binding Practice.StatusMessage}"

@@ -43,6 +43,8 @@ public sealed class TheoryNoteItem
     public int Capo { get; set; } = 0;
     public bool ShowCaged { get; set; } = true;
     public string ActiveCagedFilter { get; set; } = "ALL"; // ALL / C / A / G / E / D
+    public bool ShowThreeNps { get; set; } = false;
+    public int ActiveThreeNpsPosition { get; set; } = 0;
     public bool ShowCapsules { get; set; } = false;
     public string HighlightChord { get; set; } = "";
     public DateTime UpdatedAt { get; set; } = DateTime.Now;

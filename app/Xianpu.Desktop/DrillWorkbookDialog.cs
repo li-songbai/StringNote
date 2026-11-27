@@ -22,8 +22,9 @@ public static class DrillWorkbookDialog
         GuitarTuning tuning,
         int capo,
         string activeCagedFilter,
-        DrillPositionMode posMode,
         int fixedWindowStartFret,
+        int cofKeyCount,
+        int cofBarsPerKey,
         int threeNpsPos,
         IDictionary<string, int>? bestBpms,
         Action<string>? setStatus)
@@ -145,13 +146,13 @@ public static class DrillWorkbookDialog
                     tuning,
                     capo,
                     activeCagedFilter,
-                    posMode,
+                    p.DefaultPosMode,
                     p.Pattern,
                     p.Subdivision,
                     p.Accent,
                     fixedWindowStartFret: fixedWindowStartFret,
-                    cofKeyCount: 5,
-                    cofBarsPerKey: 2,
+                    cofKeyCount: cofKeyCount,
+                    cofBarsPerKey: cofBarsPerKey,
                     threeNpsPosition: threeNpsPos);
                 list.Add((p, gen));
             }

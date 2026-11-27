@@ -91,8 +91,10 @@ public partial class MainWindow : Window
             SetStatus,
             onSongMutated: () =>
             {
+                RecordUndoSnapshotIfChanged();
                 ScoreSurface.Rebuild();
                 UpdatePartArrangeButtonCue();
+                RefreshLibraryList();
                 UpdateActionStates();
                 UpdateViewportScale();
             });

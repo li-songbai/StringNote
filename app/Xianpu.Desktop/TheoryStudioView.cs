@@ -294,6 +294,18 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         _audio.Stop();
     }
 
+    public void HandleSpaceKey()
+    {
+        if (_activeTab == 3)
+            _drillStage?.TogglePlaybackFromShortcut();
+        else if (_activeTab == 2)
+            ToggleProgressionPlayback();
+        else if (_activeTab == 1)
+            PlayActiveChord(arpeggio: false);
+        else if (_activeTab == 0)
+            PlayAnimatedFretboardSequence();
+    }
+
     public void SyncWithCurrentSong(bool silent = false)
     {
         var song = _getCurrentSong?.Invoke();
@@ -527,10 +539,7 @@ public sealed class TheoryStudioView : UserControl, IDisposable
             if (_syncingControls || _tonicBox.SelectedItem is not ComboBoxItem { Tag: int pc }) return;
             _fretboard.TonicPitch = pc;
             _fretboard.HighlightedChord = null;
-            RebuildChordRootButtons();
-            RebuildProgressionQuickAddBar();
-            UpdateSummaryAndLegend();
-            _fretboard.Refresh();
+            NotifyFretboardManualChange();
         };
         wrap.Children.Add(_tonicBox);
 
@@ -541,10 +550,7 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         {
             if (_syncingControls || _scaleBox.SelectedItem is not ComboBoxItem { Tag: string id }) return;
             _fretboard.Scale = MusicTheoryCatalog.GetScale(id);
-            RebuildChordRootButtons();
-            RebuildProgressionQuickAddBar();
-            UpdateSummaryAndLegend();
-            _fretboard.Refresh();
+            NotifyFretboardManualChange();
         };
         wrap.Children.Add(_scaleBox);
 
@@ -583,6 +589,7 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         {
             _fretboard.ShowThreeNpsBoxes = false;
             _fretboard.ShowCagedBoxes = true;
+            _drillStage?.SyncPositionModeFromFretboard();
             SyncTopControlsFromFretboard();
             _fretboard.Refresh();
         };
@@ -592,6 +599,7 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         {
             _fretboard.ShowThreeNpsBoxes = true;
             _fretboard.ShowCapsules = false;
+            _drillStage?.SyncPositionModeFromFretboard();
             SyncTopControlsFromFretboard();
             _fretboard.Refresh();
         };
@@ -681,9 +689,7 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         {
             if (_syncingControls || _tuningBox.SelectedItem is not ComboBoxItem { Tag: string tid }) return;
             _fretboard.Tuning = MusicTheoryCatalog.GetTuning(tid);
-            UpdateSummaryAndLegend();
-            RefreshChordAnatomyDisplay(syncToFretboard: _activeTab == 1);
-            _fretboard.Refresh();
+            NotifyFretboardManualChange();
         };
         wrap.Children.Add(_tuningBox);
 
@@ -695,9 +701,7 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         {
             if (_syncingControls || _capoBox.SelectedItem is not ComboBoxItem { Tag: int capo }) return;
             _fretboard.Capo = capo;
-            UpdateSummaryAndLegend();
-            RefreshChordAnatomyDisplay(syncToFretboard: _activeTab == 1);
-            _fretboard.Refresh();
+            NotifyFretboardManualChange();
         };
         wrap.Children.Add(_capoBox);
 
@@ -1905,6 +1909,18 @@ public sealed class TheoryStudioView : UserControl, IDisposable
             RefreshNotesList();
     }
 
+    private void NotifyFretboardManualChange()
+    {
+        UpdateSummaryAndLegend();
+        RebuildLessonPracticePanels();
+        RebuildChordRootButtons();
+        RefreshChordAnatomyDisplay(syncToFretboard: _activeTab == 1);
+        RebuildProgressionQuickAddBar();
+        if (_activeTab == 3)
+            _drillStage?.OnFretboardParametersChanged();
+        _fretboard.Refresh();
+    }
+
     private void SyncTopControlsFromFretboard()
     {
         _syncingControls = true;
@@ -1938,7 +1954,10 @@ public sealed class TheoryStudioView : UserControl, IDisposable
             UpdateSummaryAndLegend();
             RebuildLessonPracticePanels();
             if (_activeTab == 3)
+            {
+                _drillStage?.SyncPositionModeFromFretboard();
                 _drillStage?.OnFretboardParametersChanged();
+            }
         }
         finally
         {
@@ -2433,21 +2452,21 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         {
             var reqHuman = 6 - reqS;
             if (!_quizSolvedInCurrentStep)
-                SetQuizVisualState(false, $"🤔 你点到了 {humanString} 弦 {fret} 品（{clickedNote}）—— 本题限定在「{reqHuman} 弦」上找哦，再试一下！", isError: true);
+                SetQuizVisualState(false, $"↺ 你点到了 {humanString} 弦 {fret} 品（{clickedNote}）—— 本题限定在「{reqHuman} 弦」上找哦，再试一下！", isError: true);
             return;
         }
 
         if ((quiz.MinFret is { } minF && fret < minF) || (quiz.MaxFret is { } maxF && fret > maxF))
         {
             if (!_quizSolvedInCurrentStep)
-                SetQuizVisualState(false, $"🤔 你点到了 {humanString} 弦 {fret} 品（{clickedNote}）—— 请在题目指定的把位品格范围内寻找！", isError: true);
+                SetQuizVisualState(false, $"↺ 你点到了 {humanString} 弦 {fret} 品（{clickedNote}）—— 请在题目指定的把位品格范围内寻找！", isError: true);
             return;
         }
 
         if (clickedPc != ((quiz.TargetPitchClass % 12) + 12) % 12)
         {
             if (!_quizSolvedInCurrentStep)
-                SetQuizVisualState(false, $"🤔 刚才点到的是 {humanString} 弦 {fret} 品「{clickedNote}」，还差一点点！可点右上角「💡 闪烁提示」观察音位。", isError: true);
+                SetQuizVisualState(false, $"↺ 刚才点到的是 {humanString} 弦 {fret} 品「{clickedNote}」，还差一点点！可点右上角「💡 闪烁提示」观察音位。", isError: true);
             return;
         }
 
@@ -3489,17 +3508,27 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         void AddTargetRow(string title, string hex, List<int> pcs)
         {
             if (pcs.Count == 0) return;
+            var col = (Color)ColorConverter.ConvertFromString(hex);
             var row = new WrapPanel { Margin = new Thickness(0, 0, 0, 6), VerticalAlignment = VerticalAlignment.Center };
-            row.Children.Add(new TextBlock
+            var labelRow = new StackPanel { Orientation = Orientation.Horizontal, Width = 108, VerticalAlignment = VerticalAlignment.Center };
+            labelRow.Children.Add(new Border
+            {
+                Width = 9,
+                Height = 9,
+                CornerRadius = new CornerRadius(5),
+                Background = new SolidColorBrush(col),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 6, 0)
+            });
+            labelRow.Children.Add(new TextBlock
             {
                 Text = title,
                 FontSize = 11,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = AppDialogs.BodyBrush,
-                VerticalAlignment = VerticalAlignment.Center,
-                Width = 104
+                VerticalAlignment = VerticalAlignment.Center
             });
-            var col = (Color)ColorConverter.ConvertFromString(hex);
+            row.Children.Add(labelRow);
             foreach (var pc in pcs)
             {
                 var pitch = pc;
@@ -3525,9 +3554,9 @@ public sealed class TheoryStudioView : UserControl, IDisposable
             _progLiveTargetPanel.Children.Add(row);
         }
 
-        AddTargetRow("🔴 拍头最稳根音", "#DC2626", roots);
-        AddTargetRow("🟡 停住好听和弦音", "#D97706", chordTones);
-        AddTargetRow("🔵 高级感色彩音", "#2563EB", colorTones);
+        AddTargetRow("拍头最稳根音", "#DC2626", roots);
+        AddTargetRow("停住好听和弦音", "#D97706", chordTones);
+        AddTargetRow("高级感色彩音", "#2563EB", colorTones);
     }
 
     private void UpdateJamTargetVisual()
@@ -3673,14 +3702,16 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         if (lib is null) return;
 
         var tonicName = MusicTheoryCatalog.NoteName(_fretboard.TonicPitch, MusicTheoryCatalog.PreferFlatsForTonic(_fretboard.TonicPitch));
-        var shapeSuffix = _fretboard.ShowCagedBoxes
-            ? (_fretboard.ActiveCagedFilter == "ALL" ? "CAGED 全指板" : $"CAGED {_fretboard.ActiveCagedFilter}形")
-            : _fretboard.Scale.Name;
+        var shapeSuffix = _fretboard.ShowThreeNpsBoxes
+            ? (_fretboard.ActiveThreeNpsPosition == 0 ? "3NPS 全指板" : $"3NPS 第{_fretboard.ActiveThreeNpsPosition}把位")
+            : (_fretboard.ShowCagedBoxes
+                ? (_fretboard.ActiveCagedFilter == "ALL" ? "CAGED 全指板" : $"CAGED {_fretboard.ActiveCagedFilter}形")
+                : _fretboard.Scale.Name);
 
         var item = new TheoryNoteItem
         {
             Title = $"{tonicName} 调 · {shapeSuffix}",
-            Tag = _fretboard.ShowCagedBoxes ? "CAGED" : "音阶",
+            Tag = (_fretboard.ShowCagedBoxes || _fretboard.ShowThreeNpsBoxes) ? "CAGED" : "音阶",
             Content = $"记录于 {DateTime.Now:yyyy-MM-dd HH:mm}\n• 记忆要点：\n• 常用乐句 / 和弦连接："
         };
         CaptureFretboardIntoNote(item);
@@ -3741,6 +3772,8 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         item.ScaleId = _fretboard.Scale.Id;
         item.TuningId = _fretboard.Tuning.Id;
         item.Capo = _fretboard.Capo;
+        item.ShowThreeNps = _fretboard.ShowThreeNpsBoxes;
+        item.ActiveThreeNpsPosition = _fretboard.ActiveThreeNpsPosition;
         item.ShowCaged = _fretboard.ShowCagedBoxes;
         item.ActiveCagedFilter = _fretboard.ActiveCagedFilter;
         item.ShowCapsules = _fretboard.ShowCapsules;
@@ -3754,9 +3787,11 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         _fretboard.Scale = MusicTheoryCatalog.GetScale(item.ScaleId);
         _fretboard.Tuning = MusicTheoryCatalog.GetTuning(item.TuningId);
         _fretboard.Capo = Math.Clamp(item.Capo, 0, 11);
-        _fretboard.ShowCagedBoxes = item.ShowCaged;
+        _fretboard.ShowThreeNpsBoxes = item.ShowThreeNps;
+        _fretboard.ActiveThreeNpsPosition = Math.Clamp(item.ActiveThreeNpsPosition, 0, 7);
+        _fretboard.ShowCagedBoxes = !item.ShowThreeNps && item.ShowCaged;
         _fretboard.ActiveCagedFilter = string.IsNullOrWhiteSpace(item.ActiveCagedFilter) ? "ALL" : item.ActiveCagedFilter;
-        _fretboard.ShowCapsules = item.ShowCapsules;
+        _fretboard.ShowCapsules = !item.ShowThreeNps && item.ShowCapsules;
         _fretboard.JamTargetColorMode = false;
         _fretboard.HighlightedChord = string.IsNullOrWhiteSpace(item.HighlightChord) ? null : ChordCatalog.ByName(item.HighlightChord);
         SyncTopControlsFromFretboard();
@@ -3963,7 +3998,8 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         var tonic = MusicTheoryCatalog.NoteName(n.TonicPitch, MusicTheoryCatalog.PreferFlatsForTonic(n.TonicPitch));
         var scale = MusicTheoryCatalog.GetScale(n.ScaleId).Name;
         var parts = new List<string> { $"{tonic} 调", scale };
-        if (n.ShowCaged) parts.Add(n.ActiveCagedFilter == "ALL" ? "CAGED 全指板" : $"CAGED {n.ActiveCagedFilter}形");
+        if (n.ShowThreeNps) parts.Add(n.ActiveThreeNpsPosition == 0 ? "3NPS 全指板" : $"3NPS 第{n.ActiveThreeNpsPosition}把位");
+        else if (n.ShowCaged) parts.Add(n.ActiveCagedFilter == "ALL" ? "CAGED 全指板" : $"CAGED {n.ActiveCagedFilter}形");
         if (n.Capo > 0) parts.Add($"Capo {n.Capo}");
         if (!string.IsNullOrWhiteSpace(n.HighlightChord)) parts.Add($"和弦 {n.HighlightChord}");
         return string.Join(" · ", parts);

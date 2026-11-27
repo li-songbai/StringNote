@@ -227,6 +227,19 @@ public partial class MainWindow
                 LibraryToggle.IsChecked = true;
         }
 
+        if (!isPractice)
+        {
+            StopAutoScroll(clearSession: true);
+            if (MetronomeToggle is not null && MetronomeToggle.IsChecked == true)
+                MetronomeToggle.IsChecked = false;
+        }
+
+        if (TopEditLeftActions is not null)
+            TopEditLeftActions.Visibility = isEdit ? Visibility.Visible : Visibility.Collapsed;
+        if (TopEditRightActions is not null)
+            TopEditRightActions.Visibility = isEdit ? Visibility.Visible : Visibility.Collapsed;
+        if (TopScoreExportActions is not null)
+            TopScoreExportActions.Visibility = isTheory ? Visibility.Collapsed : Visibility.Visible;
         if (FloatingChordBar is not null)
             FloatingChordBar.Visibility = isEdit ? Visibility.Visible : Visibility.Collapsed;
         if (InlineTransposeControls is not null)
@@ -237,6 +250,10 @@ public partial class MainWindow
             PracticeFloatingDock.Visibility = isPractice ? Visibility.Visible : Visibility.Collapsed;
         if (TheoryStudio is not null)
             TheoryStudio.Visibility = isTheory ? Visibility.Visible : Visibility.Collapsed;
+        if (BottomPracticeControls is not null)
+            BottomPracticeControls.Visibility = isPractice ? Visibility.Visible : Visibility.Collapsed;
+        if (BottomZoomControls is not null)
+            BottomZoomControls.Visibility = isTheory ? Visibility.Collapsed : Visibility.Visible;
 
         if (EditModeButton is not null)
         {

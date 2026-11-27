@@ -68,16 +68,24 @@ public partial class MainWindow
         }
 
         if (e.Key == Key.Space &&
-            !_vm.IsTheoryMode &&
-            (_autoScrollEngaged || _vm.IsPracticeMode) &&
             Keyboard.Modifiers == ModifierKeys.None &&
-            Keyboard.FocusedElement is not TextBoxBase &&
-            !ChordPopover.IsOpen &&
-            AutoScrollToggle is not null)
+            Keyboard.FocusedElement is not TextBoxBase)
         {
-            AutoScrollToggle.IsChecked = !(AutoScrollToggle.IsChecked == true);
-            e.Handled = true;
-            return;
+            if (_vm.IsTheoryMode)
+            {
+                TheoryStudio?.HandleSpaceKey();
+                e.Handled = true;
+                return;
+            }
+
+            if ((_autoScrollEngaged || _vm.IsPracticeMode) &&
+                !ChordPopover.IsOpen &&
+                AutoScrollToggle is not null)
+            {
+                AutoScrollToggle.IsChecked = !(AutoScrollToggle.IsChecked == true);
+                e.Handled = true;
+                return;
+            }
         }
 
         if (!_vm.IsTheoryMode &&

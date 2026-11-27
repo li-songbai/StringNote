@@ -72,6 +72,7 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
 
     private TextBlock _streakBadgeText = null!;
     private ComboBox _workoutPlanBox = null!;
+    private WrapPanel _workoutStationChipsWrap = null!;
     private Button _startWorkoutBtn = null!;
     private Border _workoutActiveBar = null!;
     private TextBlock _workoutProgressText = null!;
@@ -158,6 +159,7 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
         _tabSurface.BarClicked += OnTabBarClicked;
 
         Content = BuildLayout();
+        RebuildWorkoutStationChips();
         ApplyPreset(_activePreset, applyRecommendedScale: false);
     }
 
@@ -165,6 +167,7 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
     {
         UpdateStreakBadge();
         RebuildPresetList();
+        RebuildWorkoutStationChips();
         RebuildDrill();
     }
 
@@ -174,6 +177,23 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
         if (found is null) return;
         if (_workoutActive) StopWorkoutRunner(recordPartial: true);
         ApplyPreset(found, applyRecommendedScale: true);
+    }
+
+    public void TogglePlaybackFromShortcut() => TogglePlayback();
+
+    public void SyncPositionModeFromFretboard()
+    {
+        if (IsCircleOfFifthsPattern(_activePreset.Pattern)) return;
+        if (_fretboard.ShowThreeNpsBoxes && _posMode != DrillPositionMode.ThreeNotesPerString)
+        {
+            _posMode = DrillPositionMode.ThreeNotesPerString;
+            UpdateRecipeSegStyles();
+        }
+        else if (!_fretboard.ShowThreeNpsBoxes && _posMode == DrillPositionMode.ThreeNotesPerString)
+        {
+            _posMode = DrillPositionMode.FollowCaged;
+            UpdateRecipeSegStyles();
+        }
     }
 
     public void OnFretboardParametersChanged()
@@ -253,8 +273,13 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
         foreach (var plan in WorkoutPlans)
             _workoutPlanBox.Items.Add(new ComboBoxItem { Content = plan.Name, Tag = plan.Id });
         _workoutPlanBox.SelectedIndex = 0;
+        _workoutPlanBox.SelectionChanged += (_, _) => OnWorkoutPlanSelectionChanged();
         wkRow.Children.Add(_workoutPlanBox);
         wkStack.Children.Add(wkRow);
+
+        _workoutStationChipsWrap = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
+        wkStack.Children.Add(_workoutStationChipsWrap);
+
         workoutCard.Child = wkStack;
         Grid.SetRow(workoutCard, 0);
         leftGrid.Children.Add(workoutCard);
@@ -462,7 +487,7 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
 
         var metroSeg = CreateSegTrack();
         metroSeg.Margin = new Thickness(0, 2, 8, 2);
-        string[] metroLabels = ["静音拍", "🪵 正拍", "🪵 2&4反拍"];
+        string[] metroLabels = ["节拍:关", "♩ 正拍", "♩ 2&4反拍"];
         for (var m = 0; m < 3; m++)
         {
             var mode = m;
@@ -506,7 +531,24 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
         {
             var m = pm;
             var b = CreateSegBtn(lbl);
-            b.Click += (_, _) => { _posMode = m; UpdateRecipeSegStyles(); RebuildDrill(); };
+            b.Click += (_, _) =>
+            {
+                _posMode = m;
+                if (m == DrillPositionMode.ThreeNotesPerString)
+                {
+                    _fretboard.ShowThreeNpsBoxes = true;
+                    if (_fretboard.ActiveThreeNpsPosition == 0) _fretboard.ActiveThreeNpsPosition = 1;
+                }
+                else if (_fretboard.ShowThreeNpsBoxes)
+                {
+                    _fretboard.ShowThreeNpsBoxes = false;
+                    _fretboard.ShowCagedBoxes = true;
+                }
+                _syncHostTopBar();
+                _fretboard.Refresh();
+                UpdateRecipeSegStyles();
+                RebuildDrill();
+            };
             _posModeBtns[m] = b;
             ((StackPanel)posSeg.Child).Children.Add(b);
         }
@@ -592,6 +634,89 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
     }
 
     // ─── Daily 15-Minute Auto-Workout Runner & Streak Engine ──────────────────────
+
+    private void OnWorkoutPlanSelectionChanged()
+    {
+        if (_workoutPlanBox?.SelectedItem is not ComboBoxItem { Tag: string pid })
+            return;
+
+        var chosen = WorkoutPlans.FirstOrDefault(p => p.Id == pid);
+        if (chosen is null || string.Equals(chosen.Id, _activePlan.Id, StringComparison.Ordinal))
+            return;
+
+        _activePlan = chosen;
+        RebuildWorkoutStationChips();
+
+        if (_workoutActive)
+        {
+            // Live switch to Station 1 of the newly selected workout plan
+            _workoutStationIdx = 0;
+            _workoutRestSecondsLeft = 0;
+            LaunchCurrentWorkoutStation();
+            _setStatus($"已实时切换日课方案为「{_activePlan.Name}」，从第 1 站开始连播！");
+        }
+        else if (_activePlan.Stations.Length > 0)
+        {
+            var firstPreset = ScaleDrillCatalog.Presets.FirstOrDefault(p => p.Id == _activePlan.Stations[0].PresetId);
+            if (firstPreset is not null)
+                ApplyPreset(firstPreset, applyRecommendedScale: true);
+
+            var codes = string.Join(" → ", _activePlan.Stations
+                .Select(s => ScaleDrillCatalog.Presets.FirstOrDefault(p => p.Id == s.PresetId)?.CodeBadge ?? s.PresetId));
+            _setStatus($"已选择日课「{_activePlan.Name}」（共 {_activePlan.Stations.Length} 站：{codes}），已预览第 1 站，点击「▶ 开练」开始自动连播计时。");
+        }
+    }
+
+    private void RebuildWorkoutStationChips()
+    {
+        if (_workoutStationChipsWrap is null) return;
+        _workoutStationChipsWrap.Children.Clear();
+
+        for (var i = 0; i < _activePlan.Stations.Length; i++)
+        {
+            var stIdx = i;
+            var st = _activePlan.Stations[i];
+            var preset = ScaleDrillCatalog.Presets.FirstOrDefault(p => p.Id == st.PresetId);
+            if (preset is null) continue;
+
+            var isCurrent = (_workoutActive && _workoutStationIdx == stIdx) ||
+                            (!_workoutActive && string.Equals(_activePreset.Id, preset.Id, StringComparison.Ordinal));
+            var mins = Math.Max(1, st.DurationSeconds / 60);
+
+            var chip = new Border
+            {
+                Background = isCurrent ? AppDialogs.AccentLightBrush : Brushes.White,
+                BorderBrush = isCurrent ? AppDialogs.AccentBrush : CardBorder,
+                BorderThickness = new Thickness(isCurrent ? 1.3 : 1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(6, 2, 6, 2),
+                Margin = new Thickness(0, 0, 4, 3),
+                Cursor = Cursors.Hand,
+                ToolTip = $"第 {stIdx + 1} 站：[{preset.CodeBadge}] {preset.Title}（{mins} 分钟）\n点击可预览或直接跳到本站"
+            };
+            chip.Child = new TextBlock
+            {
+                Text = $"{stIdx + 1}.{preset.CodeBadge}课({mins}m)",
+                FontSize = 10,
+                FontWeight = isCurrent ? FontWeights.Bold : FontWeights.Normal,
+                Foreground = isCurrent ? AppDialogs.AccentHoverBrush : AppDialogs.MutedBrush
+            };
+            chip.MouseLeftButtonDown += (_, _) =>
+            {
+                if (_workoutActive)
+                {
+                    _workoutStationIdx = stIdx;
+                    _workoutRestSecondsLeft = 0;
+                    LaunchCurrentWorkoutStation();
+                }
+                else
+                {
+                    ApplyPreset(preset, applyRecommendedScale: true);
+                }
+            };
+            _workoutStationChipsWrap.Children.Add(chip);
+        }
+    }
 
     private void ToggleDailyWorkout()
     {
@@ -877,7 +1002,16 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
             if (isCof) _cofDial.Reset(_fretboard.TonicPitch);
         }
 
-        if (applyRecommendedScale && preset.Pattern is not (DrillPatternKind.Spider1234 or DrillPatternKind.Spider1324))
+        if (preset.Pattern is DrillPatternKind.Spider1234 or DrillPatternKind.Spider1324)
+        {
+            if (_fretboard.ShowThreeNpsBoxes)
+            {
+                _fretboard.ShowThreeNpsBoxes = false;
+                _syncHostTopBar();
+                _fretboard.Refresh();
+            }
+        }
+        else if (applyRecommendedScale)
         {
             _fretboard.Scale = MusicTheoryCatalog.GetScale(preset.RecommendedScaleId);
             _fretboard.HighlightedChord = null;
@@ -887,12 +1021,18 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
                 _fretboard.ShowThreeNpsBoxes = true;
                 if (_fretboard.ActiveThreeNpsPosition == 0) _fretboard.ActiveThreeNpsPosition = 1;
             }
+            else if (_fretboard.ShowThreeNpsBoxes)
+            {
+                _fretboard.ShowThreeNpsBoxes = false;
+                _fretboard.ShowCagedBoxes = true;
+            }
             _syncHostTopBar();
             _fretboard.Refresh();
         }
 
         UpdateRecipeSegStyles();
         RebuildPresetList();
+        RebuildWorkoutStationChips();
         RebuildBpmSparkline();
         RebuildDrill();
     }
@@ -1241,8 +1381,9 @@ public sealed class ScaleDrillStageView : UserControl, IDisposable
             _fretboard.Tuning,
             _fretboard.Capo,
             _fretboard.ActiveCagedFilter,
-            _posMode,
             _fixedWindowStartFret,
+            _cofKeyCount,
+            _cofBarsPerKey,
             npsPos,
             _getLibrary?.Invoke()?.DrillBestBpms,
             _setStatus);
