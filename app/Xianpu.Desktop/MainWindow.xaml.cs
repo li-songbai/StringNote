@@ -80,7 +80,22 @@ public partial class MainWindow : Window
         };
         _vm.PracticeModeChanged += ApplyPracticeMode;
         _vm.TheoryModeChanged += ApplyTheoryMode;
-        TheoryStudio.AttachHost(() => _selectedSong, () => _library, SaveLibraryQuietly, SetStatus);
+        TheoryStudio.AttachHost(
+            () => _selectedSong,
+            () => _library,
+            () =>
+            {
+                RefreshQuickChordBar();
+                SaveLibraryQuietly();
+            },
+            SetStatus,
+            onSongMutated: () =>
+            {
+                ScoreSurface.Rebuild();
+                UpdatePartArrangeButtonCue();
+                UpdateActionStates();
+                UpdateViewportScale();
+            });
         ApplyAdaptiveInitialWindowSize();
         LoadWindowIcon();
 

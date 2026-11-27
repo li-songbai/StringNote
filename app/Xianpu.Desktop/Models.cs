@@ -12,6 +12,7 @@ public sealed class LibraryData
     public Dictionary<string, List<string>> CustomChordsByKey { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public List<CustomChordDefinition> CustomChordShapes { get; set; } = [];
     public List<TheoryNoteItem> TheoryNotes { get; set; } = [];
+    public Dictionary<string, int> DrillBestBpms { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 public sealed class TheoryNoteItem
@@ -260,6 +261,8 @@ public sealed class TabColumnMeta
     public bool IsRest { get; set; }
     public TabStrumKind Strum { get; set; } = TabStrumKind.None;
     public bool PalmMute { get; set; }
+    public bool Accent { get; set; }
+    public int TupletGroup { get; set; } // e.g. 3 for triplet
 
     public TabColumnMeta Clone() => new()
     {
@@ -268,7 +271,9 @@ public sealed class TabColumnMeta
         Dotted = Dotted,
         IsRest = IsRest,
         Strum = Strum,
-        PalmMute = PalmMute
+        PalmMute = PalmMute,
+        Accent = Accent,
+        TupletGroup = TupletGroup
     };
 }
 

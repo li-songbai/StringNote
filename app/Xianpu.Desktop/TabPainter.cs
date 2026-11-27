@@ -4,6 +4,12 @@ using System.Windows.Media;
 
 namespace Xianpu.Desktop;
 
+public sealed record TabPlayheadState(
+    int ActiveBarIndex = -1,
+    int ActiveColumn = -1,
+    int LoopStartBar = -1,
+    int LoopEndBar = -1);
+
 public static class TabPainter
 {
     public const double ClefWidth = 32;
@@ -41,6 +47,11 @@ public static class TabPainter
     private static readonly Pen StrumPen = FreezePen(new Pen(Ink, 1.25));
     private static readonly Pen QuietPen = FreezePen(new Pen(Quiet, 0.95));
     private static readonly Pen DashedPmPen = CreateDashedPen(Quiet, 0.95);
+    private static readonly Brush PlayheadColFill = Freeze(new SolidColorBrush(Color.FromArgb(42, 47, 107, 72)));
+    private static readonly Brush PlayheadAccentFill = Freeze(new SolidColorBrush(Color.FromArgb(56, 226, 98, 36)));
+    private static readonly Brush LoopBarFill = Freeze(new SolidColorBrush(Color.FromArgb(20, 37, 99, 235)));
+    private static readonly Pen LoopBarPen = FreezePen(new Pen(Freeze(new SolidColorBrush(Color.FromArgb(140, 37, 99, 235))), 1.2) { DashStyle = DashStyles.Dash });
+    private static readonly Pen AccentMarkPen = FreezePen(new Pen(Freeze(new SolidColorBrush(Color.FromRgb(217, 102, 31))), 1.55));
 
     private static Brush Freeze(SolidColorBrush brush)
     {
@@ -87,7 +98,9 @@ public static class TabPainter
         double top,
         double availableWidth,
         Brush paperBackground,
-        double pixelsPerDip)
+        double pixelsPerDip,
+        TabPlayheadState? playhead = null,
+        List<(int BarIndex, Rect Bounds)>? outBarBounds = null)
     {
         var bars = section.Bars;
         var rhythmHeight = section.ShowRhythmStems ? RhythmRowHeight : 6.0;
@@ -151,6 +164,44 @@ public static class TabPainter
                 var barRight = barLeft + standardBarWidth;
                 var colCount = Math.Max(1, bar.ColumnCount);
                 var colWidth = standardBarWidth / colCount;
+
+                outBarBounds?.Add((barIndex, new Rect(barLeft, y, standardBarWidth, ChordRowHeight + StaffHeight + rhythmHeight)));
+
+                // Optional A-B loop bar highlight
+                if (playhead is not null && playhead.LoopStartBar >= 0 &&
+                    barIndex >= playhead.LoopStartBar && barIndex <= Math.Max(playhead.LoopStartBar, playhead.LoopEndBar))
+                {
+                    var loopRect = new Rect(barLeft + 1, staffTop - 5, standardBarWidth - 2, StaffHeight + 10);
+                    dc.DrawRoundedRectangle(LoopBarFill, LoopBarPen, loopRect, 4, 4);
+                }
+
+                // Optional active playhead column highlight
+                if (playhead is not null && playhead.ActiveBarIndex == barIndex &&
+                    playhead.ActiveColumn >= 0 && playhead.ActiveColumn < colCount)
+                {
+                    var isAccentedCol = bar.ColumnMetas.Any(m => m.Column == playhead.ActiveColumn && m.Accent);
+                    var phX = barLeft + playhead.ActiveColumn * colWidth;
+                    var phRect = new Rect(phX + 1, staffTop - 6, Math.Max(6, colWidth - 2), StaffHeight + 12);
+                    dc.DrawRoundedRectangle(isAccentedCol ? PlayheadAccentFill : PlayheadColFill, null, phRect, 4, 4);
+                }
+
+                // Accent marks (>) and triplet badges (3) above staff
+                foreach (var meta in bar.ColumnMetas)
+                {
+                    if (meta.Column < 0 || meta.Column >= colCount) continue;
+                    var mcx = barLeft + (meta.Column + 0.5) * colWidth;
+                    if (meta.Accent)
+                    {
+                        var ay = staffTop - 9.5;
+                        dc.DrawLine(AccentMarkPen, new Point(mcx - 4.2, ay - 2.6), new Point(mcx + 4.2, ay));
+                        dc.DrawLine(AccentMarkPen, new Point(mcx - 4.2, ay + 2.6), new Point(mcx + 4.2, ay));
+                    }
+                    if (meta.TupletGroup == 3 && meta.Column % 3 == 1)
+                    {
+                        var tFt = CreateText("3", 8.8, TabTitleTypeface, Quiet, pixelsPerDip);
+                        dc.DrawText(tFt, new Point(mcx - tFt.Width / 2, staffBottom + rhythmHeight - 11));
+                    }
+                }
 
                 // Subtle beat ticks when rhythm stems are disabled
                 if (!section.ShowRhythmStems)

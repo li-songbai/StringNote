@@ -164,6 +164,9 @@ public sealed class LibraryStore
                 StringComparer.OrdinalIgnoreCase);
             loaded.CustomChordShapes ??= [];
             loaded.TheoryNotes ??= [];
+            loaded.DrillBestBpms = new Dictionary<string, int>(
+                loaded.DrillBestBpms ?? new Dictionary<string, int>(),
+                StringComparer.OrdinalIgnoreCase);
             if (applyCustomChords)
                 ChordCatalog.LoadCustomData(loaded.CustomChordsByKey, loaded.CustomChordShapes);
             foreach (var song in loaded.Songs)

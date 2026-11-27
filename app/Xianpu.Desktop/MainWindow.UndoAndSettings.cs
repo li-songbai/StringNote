@@ -234,6 +234,7 @@ public partial class MainWindow
         _library.CustomChordsByKey ??= new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         _library.CustomChordShapes ??= [];
         _library.TheoryNotes ??= [];
+        _library.DrillBestBpms ??= new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         ChordCatalog.LoadCustomData(_library.CustomChordsByKey, _library.CustomChordShapes);
 
         if (_library.Songs.Count == 0)

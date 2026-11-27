@@ -106,6 +106,8 @@ public sealed class FretboardCanvas : FrameworkElement
     public ChordShape? HighlightedChord { get; set; }
     public bool JamTargetColorMode { get; set; }
     public string? JamActiveChordName { get; set; }
+    public (int StringIdx, int Fret, bool IsAccent)? DrillCurrentSpot { get; set; }
+    public (int StringIdx, int Fret)? DrillNextSpot { get; set; }
 
     public event Action<int, int, int>? FretClicked;          // (stringIndex 0..5, fret 0..17, midiNote)
     public event Action<string>? CagedBadgeClicked;           // ("C" | "A" | "G" | "E" | "D")
@@ -154,6 +156,18 @@ public sealed class FretboardCanvas : FrameworkElement
         _seqAnimTimer.Stop();
         _seqAnimQueue.Clear();
         _seqAnimIndex = 0;
+        DrillCurrentSpot = null;
+        DrillNextSpot = null;
+    }
+
+    public void SetDrillLookahead((int StringIdx, int Fret, bool IsAccent)? current, (int StringIdx, int Fret)? next)
+    {
+        DrillCurrentSpot = current;
+        DrillNextSpot = next;
+        if (current is { } cur)
+            AddRipple(cur.StringIdx, cur.Fret, cur.IsAccent ? 460 : 300);
+        else
+            InvalidateVisual();
     }
 
     public void FlashNote(int stringIndex, int fret, int durationMs = 360)
@@ -632,11 +646,13 @@ public sealed class FretboardCanvas : FrameworkElement
                 var midi = Tuning.OpenMidi[s] + f;
                 var pc = ((midi % 12) + 12) % 12;
                 var isChordSpot = highlightedFretSet.Contains((s, f));
+                var isDrillSpot = (DrillCurrentSpot is { } dcs && dcs.StringIdx == s && dcs.Fret == f) ||
+                                  (DrillNextSpot is { } dns && dns.StringIdx == s && dns.Fret == f);
                 var inScale = scaleSet.Contains(pc);
                 var ripple = _activeRipples.FirstOrDefault(r => r.StringIdx == s && r.Fret == f && r.ExpireAt > nowUtc);
                 var isRippling = ripple != default;
 
-                if (!inScale && !isChordSpot && !isRippling)
+                if (!inScale && !isChordSpot && !isRippling && !isDrillSpot)
                     continue;
 
                 var cx = GetFretCenterX(f);
@@ -719,7 +735,7 @@ public sealed class FretboardCanvas : FrameworkElement
                     _ => MusicTheoryCatalog.GetDegreeLabel(pc, TonicPitch)
                 };
 
-                if (dimmed && !isRippling && !isHovered)
+                if (dimmed && !isRippling && !isHovered && !isDrillSpot)
                     dc.PushOpacity(0.24);
 
                 // Animated expanding pluck ripple ring
@@ -755,8 +771,82 @@ public sealed class FretboardCanvas : FrameworkElement
                 var ft = CreateText(label, fontSize, DotTypeface, textBrush);
                 dc.DrawText(ft, new Point(cx - ft.Width / 2, cy - ft.Height / 2));
 
-                if (dimmed && !isRippling && !isHovered)
+                if (dimmed && !isRippling && !isHovered && !isDrillSpot)
                     dc.Pop();
+            }
+        }
+
+        // ─── 9.5 Drill Lookahead Trajectory Arc + Next Ring + Current Accent Halo ─
+        if (DrillCurrentSpot is { } curSpot && curSpot.Fret >= Capo && curSpot.Fret <= TotalFrets)
+        {
+            var cx1 = GetFretCenterX(curSpot.Fret);
+            var cy1 = _stringY[curSpot.StringIdx];
+
+            if (DrillNextSpot is { } nxtSpot && nxtSpot.Fret >= Capo && nxtSpot.Fret <= TotalFrets &&
+                (nxtSpot.StringIdx != curSpot.StringIdx || nxtSpot.Fret != curSpot.Fret))
+            {
+                var cx2 = GetFretCenterX(nxtSpot.Fret);
+                var cy2 = _stringY[nxtSpot.StringIdx];
+
+                // Next-note ghost preview ring
+                var nextPen = new Pen(new SolidColorBrush(Color.FromArgb(210, 37, 99, 235)), 2.0) { DashStyle = DashStyles.Dash };
+                dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(30, 37, 99, 235)), nextPen, new Point(cx2, cy2), 15.5, 15.5);
+
+                // Curved trajectory arrow from current note -> next note
+                var dx = cx2 - cx1;
+                var dy = cy2 - cy1;
+                var len = Math.Sqrt(dx * dx + dy * dy);
+                if (len > 22)
+                {
+                    var ux = dx / len;
+                    var uy = dy / len;
+                    var pStart = new Point(cx1 + ux * 14.5, cy1 + uy * 14.5);
+                    var pEnd = new Point(cx2 - ux * 16.5, cy2 - uy * 16.5);
+                    var bend = Math.Clamp(len * 0.18, 10, 26);
+                    var ctrl = new Point((pStart.X + pEnd.X) / 2 - uy * bend, (pStart.Y + pEnd.Y) / 2 - Math.Abs(ux) * bend);
+
+                    var arcGeo = new StreamGeometry();
+                    using (var ctx = arcGeo.Open())
+                    {
+                        ctx.BeginFigure(pStart, isFilled: false, isClosed: false);
+                        ctx.QuadraticBezierTo(ctrl, pEnd, isStroked: true, isSmoothJoin: true);
+                    }
+                    arcGeo.Freeze();
+                    var arcPen = new Pen(new SolidColorBrush(Color.FromArgb(195, 37, 99, 235)), 2.0) { DashStyle = DashStyles.Dash };
+                    dc.DrawGeometry(null, arcPen, arcGeo);
+
+                    // Arrowhead at pEnd
+                    var tx = pEnd.X - ctrl.X;
+                    var ty = pEnd.Y - ctrl.Y;
+                    var tLen = Math.Max(0.001, Math.Sqrt(tx * tx + ty * ty));
+                    tx /= tLen;
+                    ty /= tLen;
+                    var headPen = new Pen(new SolidColorBrush(Color.FromArgb(225, 37, 99, 235)), 2.1);
+                    dc.DrawLine(headPen, pEnd, new Point(pEnd.X - tx * 7 - ty * 4.2, pEnd.Y - ty * 7 + tx * 4.2));
+                    dc.DrawLine(headPen, pEnd, new Point(pEnd.X - tx * 7 + ty * 4.2, pEnd.Y - ty * 7 - tx * 4.2));
+                }
+            }
+
+            // Current active note focus ring / blazing gold accent halo
+            if (curSpot.IsAccent)
+            {
+                dc.DrawEllipse(
+                    new SolidColorBrush(Color.FromArgb(55, 245, 158, 11)),
+                    new Pen(new SolidColorBrush(Color.FromRgb(245, 158, 11)), 3.0),
+                    new Point(cx1, cy1),
+                    17.5,
+                    17.5);
+                var accBadge = CreateText(">", 12, DotTypeface, new SolidColorBrush(Color.FromRgb(217, 119, 6)));
+                dc.DrawText(accBadge, new Point(cx1 - accBadge.Width / 2, cy1 - 28));
+            }
+            else
+            {
+                dc.DrawEllipse(
+                    null,
+                    new Pen(Brushes.White, 2.8),
+                    new Point(cx1, cy1),
+                    15.0,
+                    15.0);
             }
         }
 

@@ -54,6 +54,7 @@ public sealed class TheoryStudioView : UserControl, IDisposable
     private Func<SongModel?>? _getCurrentSong;
     private Func<LibraryData>? _getLibrary;
     private Action? _onLibraryMutated;
+    private Action? _onSongMutated;
     private Action<string>? _setStatus;
 
     // Top fretboard bar controls
@@ -71,10 +72,11 @@ public sealed class TheoryStudioView : UserControl, IDisposable
     private Button _roseWoodBtn = null!;
     private Button _muteBtn = null!;
 
-    // Bottom 4-tab underline navigation
-    private readonly Button[] _tabButtons = new Button[4];
-    private readonly Border[] _tabIndicators = new Border[4];
-    private readonly UIElement[] _tabPages = new UIElement[4];
+    // Bottom 5-tab underline navigation
+    private readonly Button[] _tabButtons = new Button[5];
+    private readonly Border[] _tabIndicators = new Border[5];
+    private readonly UIElement[] _tabPages = new UIElement[5];
+    private ScaleDrillStageView _drillStage = null!;
     private int _activeTab;
 
     // Tab 0: Lessons
@@ -217,11 +219,13 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         Func<SongModel?> getCurrentSong,
         Func<LibraryData> getLibrary,
         Action onLibraryMutated,
-        Action<string> setStatus)
+        Action<string> setStatus,
+        Action? onSongMutated = null)
     {
         _getCurrentSong = getCurrentSong;
         _getLibrary = getLibrary;
         _onLibraryMutated = onLibraryMutated;
+        _onSongMutated = onSongMutated;
         _setStatus = setStatus;
         RefreshNotesList();
     }
@@ -236,6 +240,7 @@ public sealed class TheoryStudioView : UserControl, IDisposable
     {
         FlushPendingNoteSave();
         StopProgressionPlayback();
+        _drillStage?.StopPlayback();
         _fretboard.StopAnimations();
         _audio.Stop();
     }
@@ -376,18 +381,18 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         quickSaveSnapBtn.Margin = new Thickness(0, 0, 0, 6);
         quickSaveSnapBtn.Click += (_, _) =>
         {
-            SwitchTab(3);
+            SwitchTab(4);
             CreateTheoryNoteFromCurrentFretboard();
         };
         DockPanel.SetDock(quickSaveSnapBtn, Dock.Right);
         navDock.Children.Add(quickSaveSnapBtn);
 
         var tabBar = new StackPanel { Orientation = Orientation.Horizontal };
-        string[] tabLabels = ["📖 互动乐理与 CAGED 课", "🎸 和弦解剖库", "🎵 和弦进行 & 靶向音", "🗂 我的乐理收集本"];
-        for (var i = 0; i < 4; i++)
+        string[] tabLabels = ["📖 互动乐理与 CAGED 课", "🎸 和弦解剖库", "🎵 和弦进行 & 靶向音", "⚡ 指板练功房", "🗂 我的乐理收集本"];
+        for (var i = 0; i < 5; i++)
         {
             var idx = i;
-            var wrapper = new StackPanel { Margin = new Thickness(0, 0, 18, 0) };
+            var wrapper = new StackPanel { Margin = new Thickness(0, 0, 16, 0) };
             var btn = new Button
             {
                 Content = tabLabels[i],
@@ -416,11 +421,26 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         Grid.SetRow(navBorder, 0);
         studioGrid.Children.Add(navBorder);
 
+        _drillStage = new ScaleDrillStageView(
+            _fretboard,
+            _audio,
+            SyncTopControlsFromFretboard,
+            () => _getCurrentSong?.Invoke(),
+            () => _getLibrary?.Invoke(),
+            () => _onLibraryMutated?.Invoke(),
+            () =>
+            {
+                _onSongMutated?.Invoke();
+                _onLibraryMutated?.Invoke();
+            },
+            msg => _setStatus?.Invoke(msg));
+
         var tabHost = new Grid();
         _tabPages[0] = BuildLessonsTab();
         _tabPages[1] = BuildChordAnatomyTab();
         _tabPages[2] = BuildProgressionTab();
-        _tabPages[3] = BuildNotebookTab();
+        _tabPages[3] = _drillStage;
+        _tabPages[4] = BuildNotebookTab();
         foreach (var page in _tabPages)
             tabHost.Children.Add(page);
 
@@ -1553,11 +1573,13 @@ public sealed class TheoryStudioView : UserControl, IDisposable
 
     private void SwitchTab(int idx)
     {
-        _activeTab = Math.Clamp(idx, 0, 3);
+        _activeTab = Math.Clamp(idx, 0, 4);
         if (_activeTab != 2)
             StopProgressionPlayback();
+        if (_activeTab != 3)
+            _drillStage?.StopPlayback();
 
-        for (var i = 0; i < 4; i++)
+        for (var i = 0; i < 5; i++)
         {
             var sel = i == _activeTab;
             _tabPages[i].Visibility = sel ? Visibility.Visible : Visibility.Collapsed;
@@ -1573,6 +1595,8 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         else if (_activeTab == 2)
             RebuildProgressionQuickAddBar();
         else if (_activeTab == 3)
+            _drillStage?.OnTabActivated();
+        else if (_activeTab == 4)
             RefreshNotesList();
     }
 
@@ -1608,6 +1632,8 @@ public sealed class TheoryStudioView : UserControl, IDisposable
             StyleTogglePill(_capsulePillBtn, _fretboard.ShowCapsules);
             UpdateSummaryAndLegend();
             RebuildLessonPracticePanels();
+            if (_activeTab == 3)
+                _drillStage?.OnFretboardParametersChanged();
         }
         finally
         {
@@ -3375,6 +3401,7 @@ public sealed class TheoryStudioView : UserControl, IDisposable
         _disposed = true;
         _progBeatTimer.Stop();
         _noteAutoSaveTimer.Stop();
+        _drillStage?.Dispose();
         _fretboard.StopAnimations();
         _audio.Dispose();
     }

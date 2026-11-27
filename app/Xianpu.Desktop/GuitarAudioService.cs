@@ -57,6 +57,86 @@ public sealed class GuitarAudioService : IDisposable
         PlayWavBytes(wav);
     }
 
+    /// <summary>
+    /// Plays a single real-time drill step mixing optional guitar pluck (with accent punch)
+    /// and optional woodblock metronome click into a single WAV buffer so winmm PlaySound never cuts off either layer.
+    /// </summary>
+    public void PlayDrillStep(
+        int? midiNote,
+        bool isNoteAccent,
+        bool playClick,
+        bool isDownbeatClick,
+        int durationMs = 420)
+    {
+        if (_disposed || IsMuted) return;
+        if (midiNote is null && !playClick) return;
+
+        var wav = SynthesizeDrillStepWav(midiNote, isNoteAccent, playClick, isDownbeatClick, durationMs, Volume);
+        PlayWavBytes(wav);
+    }
+
+    public static byte[] SynthesizeDrillStepWav(
+        int? midiNote,
+        bool isNoteAccent,
+        bool playClick,
+        bool isDownbeatClick,
+        int durationMs = 420,
+        double masterVolume = 0.78)
+    {
+        var clampedMs = Math.Clamp(durationMs, 90, 1800);
+        var totalSamples = (int)(SampleRate * clampedMs / 1000.0);
+        var mix = new double[totalSamples];
+
+        if (midiNote is { } midi)
+        {
+            var freq = 440.0 * Math.Pow(2.0, (midi - 69) / 12.0);
+            if (freq is >= 55.0 and <= 2200.0)
+            {
+                var gain = isNoteAccent ? 0.96 : 0.62;
+                RenderKarplusStrongPluck(mix, 0, totalSamples, freq, gain);
+                if (isNoteAccent)
+                {
+                    // Crisp pick attack transient for accented notes (>)
+                    var transientLen = Math.Min(totalSamples, SampleRate * 12 / 1000);
+                    for (var i = 0; i < transientLen; i++)
+                    {
+                        var env = Math.Exp(-i / (SampleRate * 0.0028));
+                        mix[i] += Math.Sin(2.0 * Math.PI * freq * 2.0 * i / SampleRate) * 0.24 * env;
+                    }
+                }
+            }
+        }
+
+        if (playClick)
+        {
+            // Clean woodblock click (1250 Hz accent beat 1, 880 Hz normal beat)
+            var clickFreq = isDownbeatClick ? 1260.0 : 880.0;
+            var clickGain = isDownbeatClick ? 0.56 : 0.36;
+            var clickSamples = Math.Min(totalSamples, (int)(SampleRate * 0.032));
+            for (var i = 0; i < clickSamples; i++)
+            {
+                var t = (double)i / SampleRate;
+                var env = Math.Exp(-t * 145.0);
+                var body = Math.Sin(2.0 * Math.PI * clickFreq * t) + 0.32 * Math.Sin(2.0 * Math.PI * clickFreq * 2.42 * t);
+                mix[i] += body * clickGain * env;
+            }
+        }
+
+        var peak = 0.001;
+        for (var i = 0; i < totalSamples; i++)
+        {
+            var abs = Math.Abs(mix[i]);
+            if (abs > peak) peak = abs;
+        }
+        var normGain = Math.Clamp(masterVolume, 0.0, 1.0) * (peak > 0.94 ? 0.94 / peak : 1.0);
+
+        var fadeSamples = Math.Min(totalSamples, SampleRate * 12 / 1000);
+        for (var i = 0; i < fadeSamples; i++)
+            mix[totalSamples - fadeSamples + i] *= 1.0 - (double)i / fadeSamples;
+
+        return EncodePcm16Wav(mix, normGain);
+    }
+
     public void Stop()
     {
         lock (_lock)

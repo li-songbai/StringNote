@@ -556,6 +556,8 @@ public sealed class CoreLogicTests
                 Content = "第 3 品 E 指型接第 5 品 D 指型非常顺手。"
             });
 
+            lib.DrillBestBpms["u2_28_disp_beat"] = 108;
+
             store.Save(lib);
             var reloaded = store.Load();
             Assert.Single(reloaded.TheoryNotes);
@@ -566,6 +568,7 @@ public sealed class CoreLogicTests
             Assert.Equal("E", note.ActiveCagedFilter);
             Assert.Equal(2, note.Capo);
             Assert.Equal("G", note.HighlightChord);
+            Assert.Equal(108, reloaded.DrillBestBpms["u2_28_disp_beat"]);
         }
         finally
         {
@@ -573,5 +576,76 @@ public sealed class CoreLogicTests
             if (Directory.Exists(tempDir))
                 Directory.Delete(tempDir, recursive: true);
         }
+    }
+
+    [Fact]
+    public void ScaleDrillCatalog_GeneratesValidSequencesSkipsArpeggiosAndSinglePosCircleOfFifths()
+    {
+        var std = MusicTheoryCatalog.GetTuning("standard");
+        Assert.True(ScaleDrillCatalog.Presets.Count >= 28);
+
+        // 1. Validate every preset generates valid playable TAB bars and events
+        foreach (var preset in ScaleDrillCatalog.Presets)
+        {
+            var scale = MusicTheoryCatalog.GetScale(preset.RecommendedScaleId);
+            var drill = ScaleDrillCatalog.Generate(
+                tonicPitch: 0,
+                scale: scale,
+                tuning: std,
+                capo: 0,
+                activeCagedFilter: "G",
+                posMode: preset.DefaultPosMode,
+                pattern: preset.Pattern,
+                subdivision: preset.Subdivision,
+                accentMode: preset.Accent);
+
+            Assert.NotEmpty(drill.Section.Bars);
+            Assert.NotEmpty(drill.Events);
+            foreach (var ev in drill.Events)
+            {
+                Assert.InRange(ev.StringIdx, 0, 5);
+                Assert.InRange(ev.Fret, 0, FretboardCanvas.TotalFrets);
+                Assert.Equal(std.OpenMidi[ev.StringIdx] + ev.Fret, ev.Midi);
+            }
+        }
+
+        // 2. Verify 3-against-4 cross-beat accent displacement (every 3rd sixteenth note accented)
+        var crossDrill = ScaleDrillCatalog.Generate(
+            tonicPitch: 9,
+            scale: MusicTheoryCatalog.GetScale("minor_pent"),
+            tuning: std,
+            capo: 0,
+            activeCagedFilter: "G",
+            posMode: DrillPositionMode.FollowCaged,
+            pattern: DrillPatternKind.Seq3,
+            subdivision: DrillSubdivision.Sixteenth,
+            accentMode: DrillAccentMode.GroupOf3CrossBeat);
+        Assert.Equal(16, crossDrill.Section.ColumnsPerBar);
+        for (var i = 0; i < Math.Min(12, crossDrill.Events.Count); i++)
+            Assert.Equal(i % 3 == 0, crossDrill.Events[i].IsAccent);
+
+        // 3. Verify Single-Position Circle of Fourths (Lesson 58): 5 distinct keys & all 5 CAGED shapes inside frets 5..9!
+        var cofDrill = ScaleDrillCatalog.Generate(
+            tonicPitch: 0,
+            scale: MusicTheoryCatalog.GetScale("major_pent"),
+            tuning: std,
+            capo: 0,
+            activeCagedFilter: "ALL",
+            posMode: DrillPositionMode.FixedWindow5To8,
+            pattern: DrillPatternKind.CircleOf4thsPentatonic,
+            subdivision: DrillSubdivision.Eighth,
+            accentMode: DrillAccentMode.BeatDownbeat);
+
+        var distinctKeys = cofDrill.Events.Select(e => e.EffectiveTonicPitch).Distinct().ToList();
+        var distinctCaged = cofDrill.Events.Select(e => e.EffectiveCagedLetter).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        Assert.Equal([0, 5, 10, 3, 8], distinctKeys); // C -> F -> Bb -> Eb -> Ab
+        Assert.Equal(5, distinctCaged.Count);         // Covers all 5 C-A-G-E-D shapes in one position!
+        Assert.All(cofDrill.Events, ev => Assert.InRange(ev.Fret, 5, 9));
+
+        // 4. Verify single-step pluck + woodblock click audio mixer produces valid RIFF WAVE
+        var stepWav = GuitarAudioService.SynthesizeDrillStepWav(midiNote: 60, isNoteAccent: true, playClick: true, isDownbeatClick: true);
+        Assert.True(stepWav.Length > 44);
+        Assert.Equal((byte)'R', stepWav[0]);
+        Assert.Equal((byte)'W', stepWav[8]);
     }
 }
